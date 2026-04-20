@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 
+	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/gas"
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/memory"
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/opcodes"
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/stack"
@@ -10,13 +11,14 @@ import (
 )
 
 var ErrInvalidOpcode = errors.New("invalid opcode")
+var ErrOutOfGas = errors.New("out of gas")
 
 // Executor interface implementation
-func (evm *EVM) GetStack() types.Stack  { return evm.state.Stack }
+func (evm *EVM) GetStack() types.Stack   { return evm.state.Stack }
 func (evm *EVM) GetMemory() types.Memory { return evm.state.Memory }
-func (evm *EVM) GetCode() []byte        { return evm.ctx.ByteCode }
-func (evm *EVM) GetPC() uint64          { return evm.state.Pc }
-func (evm *EVM) SetPC(pc uint64)        { evm.state.Pc = pc }
+func (evm *EVM) GetCode() []byte         { return evm.ctx.ByteCode }
+func (evm *EVM) GetPC() uint64           { return evm.state.Pc }
+func (evm *EVM) SetPC(pc uint64)         { evm.state.Pc = pc }
 
 // EVM is the Ethereum Virtual Machine.
 type EVM struct {
@@ -31,6 +33,7 @@ func New(ctx types.ExecutionContext) *EVM {
 		ctx: ctx,
 		state: types.MachineState{
 			Pc:     0,
+			Gas:    ^uint64(0), // start with max uint64 gas
 			Stack:  stack.New(),
 			Memory: memory.New(),
 		},
@@ -57,7 +60,7 @@ func (evm *EVM) State() *types.MachineState {
 	return &evm.state
 }
 
-// Run executes the bytecode until STOP, an error occurs or it runs out of gas. 
+// Run executes the bytecode until STOP, an error occurs or it runs out of gas.
 // It returns the output data or an error.
 func (evm *EVM) Run() ([]byte, error) {
 	code := evm.ctx.ByteCode
@@ -67,13 +70,17 @@ func (evm *EVM) Run() ([]byte, error) {
 			return nil, ErrInvalidOpcode
 		}
 
-		op := code[pc]
-		fn := evm.jumpTable[op]
+		opcode := types.OpCode(code[pc])
+		fn := evm.jumpTable[opcode]
 		if fn == nil {
 			return nil, ErrInvalidOpcode
 		}
 
-		// TODO: gas deduction goes here
+		cost := gas.Cost(opcode, evm)
+		if evm.state.Gas < cost {
+			return nil, ErrOutOfGas
+		}
+		evm.state.Gas -= cost
 
 		if err := fn(evm); err != nil {
 			if errors.Is(err, types.ErrStopExecution) {

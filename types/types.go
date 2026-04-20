@@ -20,6 +20,59 @@ type Stack interface {
 	Len() int
 }
 
+// MachineState holds the volatile, execution-specific state of the EVM.
+// It is completely wiped after the execution halts.
+type MachineState struct {
+	// Pc is the Program Counter, indicating the current instruction index.
+	Pc uint64
+	
+	// Gas is the available gas for the current execution context.
+	Gas uint64
+	
+	// Stack is the 1024-item execution stack.
+	Stack Stack
+	
+	// Memory is the volatile, expandable byte array.
+	Memory Memory
+	
+	// ReturnData holds the output of the previous sub-context call.
+	ReturnData []byte
+}
+
+// ExecutionContext represents the execution environment (tuple I) defined in the Yellow Paper section 9.3.
+// It contains information that remains constant during the execution of a specific context.
+type ExecutionContext struct {
+	// Ia: The address of the account which owns the code that is executing.
+	Address Address
+	
+	// Io: The sender address of the transaction that originated this execution.
+	Origin Address
+
+	// Ip: The price of gas paid by the signer of the transaction.
+	GasPrice *big.Int
+	
+	// Id: The byte array that is the input data to this execution (calldata).
+	Input []byte
+	
+	// Is: The address of the account which caused the code to be executing (caller).
+	Caller Address
+	
+	// Iv: The value, in Wei, passed to this account as part of the execution.
+	Value *big.Int
+	
+	// Ib: The byte array that is the machine code to be executed.
+	ByteCode []byte
+	
+	// Ie: The depth of the present message-call or contract-creation.
+	Depth int
+	
+	// Iw: The permission to make modifications to the state (false for STATICCALL).
+	ReadOnly bool
+
+	// StateDB provides access to the global world state.
+	StateDB StateDB
+}
+
 // Memory defines the interface for the EVM volatile memory.
 // Memory is a byte array that expands as needed, incurring a gas cost.
 type Memory interface {

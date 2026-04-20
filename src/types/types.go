@@ -1,6 +1,25 @@
 package types
 
-import "math/big"
+import (
+	"errors"
+	"math/big"
+)
+
+// ErrStopExecution signals a normal STOP halt (not a real error).
+var ErrStopExecution = errors.New("stop execution")
+
+// OpFunc is a function that implements a single EVM opcode.
+type OpFunc func(Executor) error
+
+// Executor is the interface opcode implementations use to interact with the EVM.
+// It decouples the opcodes package from the core package, avoiding circular imports.
+type Executor interface {
+	GetStack() Stack
+	GetMemory() Memory
+	GetCode() []byte
+	GetPC() uint64
+	SetPC(uint64)
+}
 
 // OpCode represents an EVM instruction.
 type OpCode byte

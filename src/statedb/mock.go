@@ -3,7 +3,7 @@ package statedb
 import (
 	"math/big"
 
-	"github.com/tinchomorilla/ethereum-virtual-machine-evm/types"
+	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/types"
 )
 
 // Account represents an in-memory Ethereum account for the mock DB.

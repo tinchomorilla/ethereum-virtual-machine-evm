@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/tinchomorilla/ethereum-virtual-machine-evm/types"
+	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/types"
 )
 
 // TestStateDBBalance verifies the logic for adding, subtracting and reading balances.

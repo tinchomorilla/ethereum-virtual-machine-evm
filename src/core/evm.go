@@ -49,6 +49,10 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x03] = opcodes.OpSUB
 	evm.jumpTable[0x04] = opcodes.OpDIV
 	evm.jumpTable[0x50] = opcodes.OpPOP
+	evm.jumpTable[0x51] = opcodes.OpMLOAD
+	evm.jumpTable[0x52] = opcodes.OpMSTORE
+	evm.jumpTable[0x53] = opcodes.OpMSTORE8
+	evm.jumpTable[0x59] = opcodes.OpMSIZE
 
 	for i := range 32 {
 		evm.jumpTable[0x60+i] = opcodes.MakePush(i + 1)
@@ -76,7 +80,10 @@ func (evm *EVM) Run() ([]byte, error) {
 			return nil, ErrInvalidOpcode
 		}
 
-		cost := gas.Cost(opcode, evm)
+		cost, err := gas.Cost(opcode, evm)
+		if err != nil {
+			return nil, err
+		}
 		if evm.state.Gas < cost {
 			return nil, ErrOutOfGas
 		}

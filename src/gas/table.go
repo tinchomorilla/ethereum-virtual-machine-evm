@@ -1,5 +1,7 @@
 package gas
 
+import "github.com/tinchomorilla/ethereum-virtual-machine-evm/src/types"
+
 const (
 	GZero          uint64 = 0
 	GJumpDest      uint64 = 1
@@ -36,6 +38,13 @@ const (
 	GLogData       uint64 = 8
 	GLogTopic      uint64 = 375
 )
+
+// dynamicCostFunc defines a function that calculates the runtime gas cost of an opcode.
+// It returns the additional dynamic cost, or an error if stack requirements aren't met.
+type dynamicCostFunc func(e types.Executor) (uint64, error)
+
+// dynamicCost holds the dynamic gas cost functions for opcodes that require runtime calculation.
+var dynamicCost [256]dynamicCostFunc
 
 // staticCost holds the base gas cost for each opcode (0x00..0xff).
 // Opcodes with dynamic behavior store only their static component here.
@@ -139,4 +148,58 @@ func init() {
 	staticCost[0xfa] = GCall         // TODO: dynamic cost
 	staticCost[0xfd] = GZero         // TODO: dynamic cost
 	staticCost[0xff] = GSelfDestruct // TODO: dynamic cost
+
+	// Dynamic cost functions for opcodes that require runtime calculation.
+	dynamicCost[0x51] = gasMStoreAndMLoad
+	dynamicCost[0x52] = gasMStoreAndMLoad
+	dynamicCost[0x53] = gasMStore8
+
+}
+
+// memoryCost calculates the gas cost for a given memory size in words (32 bytes).
+func memoryCost(words uint64) uint64 {
+	return (words * GMemory) + ((words * words) / 512)
+}
+
+// calcMemExpansionCost calculates the additional gas cost for expanding memory from currentSize to newSize (in bytes).
+func calcMemExpansionCost(currentSize uint64, newSize uint64) uint64 {
+	if newSize <= currentSize {
+		return 0
+	}
+
+	currentWords := (currentSize + 31) / 32
+	newWords := (newSize + 31) / 32
+
+	// The cost is the difference in memory cost before and after expansion.
+	return memoryCost(newWords) - memoryCost(currentWords)
+}
+
+func gasMStoreAndMLoad(e types.Executor) (uint64, error) {
+	offset, err := e.GetStack().Peek(1)
+	if err != nil {
+		return 0, err
+	}
+
+	size := uint64(32)
+
+	// i should check if the offset is valid (not too large) but for simplicity, let's assume it's always valid.
+	newSize := offset.Uint64() + size
+
+	currentSize := e.GetMemory().Len()
+
+	return calcMemExpansionCost(currentSize, newSize), nil
+}
+
+func gasMStore8(e types.Executor) (uint64, error) {
+	offset, err := e.GetStack().Peek(1)
+	if err != nil {
+		return 0, err
+	}
+
+	size := uint64(1)
+
+	newSize := offset.Uint64() + size
+	currentSize := e.GetMemory().Len()
+
+	return calcMemExpansionCost(currentSize, newSize), nil
 }

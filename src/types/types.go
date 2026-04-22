@@ -19,6 +19,7 @@ type Executor interface {
 	GetCode() []byte
 	GetPC() uint64
 	SetPC(uint64)
+	GetJumpDests() map[uint64]struct{}
 }
 
 // OpCode represents an EVM instruction.
@@ -58,7 +59,7 @@ type MachineState struct {
 	ReturnData []byte
 }
 
-// ExecutionContext represents the execution environment (tuple I) defined in the Yellow Paper section 9.3.
+// ExecutionContext represents the execution environment (tuple I) defined in the Yellow Paper.
 // It contains information that remains constant during the execution of a specific context.
 type ExecutionContext struct {
 	// Ia: The address of the account which owns the code that is executing.

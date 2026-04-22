@@ -14,17 +14,19 @@ var ErrInvalidOpcode = errors.New("invalid opcode")
 var ErrOutOfGas = errors.New("out of gas")
 
 // Executor interface implementation
-func (evm *EVM) GetStack() types.Stack   { return evm.state.Stack }
-func (evm *EVM) GetMemory() types.Memory { return evm.state.Memory }
-func (evm *EVM) GetCode() []byte         { return evm.ctx.ByteCode }
-func (evm *EVM) GetPC() uint64           { return evm.state.Pc }
-func (evm *EVM) SetPC(pc uint64)         { evm.state.Pc = pc }
+func (evm *EVM) GetStack() types.Stack             { return evm.state.Stack }
+func (evm *EVM) GetMemory() types.Memory           { return evm.state.Memory }
+func (evm *EVM) GetCode() []byte                   { return evm.ctx.ByteCode }
+func (evm *EVM) GetPC() uint64                     { return evm.state.Pc }
+func (evm *EVM) SetPC(pc uint64)                   { evm.state.Pc = pc }
+func (evm *EVM) GetJumpDests() map[uint64]struct{} { return evm.jumpDests }
 
 // EVM is the Ethereum Virtual Machine.
 type EVM struct {
 	ctx       types.ExecutionContext
 	state     types.MachineState
 	jumpTable [256]types.OpFunc
+	jumpDests map[uint64]struct{}
 }
 
 // New creates a new EVM instance ready to execute the given context.
@@ -37,6 +39,7 @@ func New(ctx types.ExecutionContext) *EVM {
 			Stack:  stack.New(),
 			Memory: memory.New(),
 		},
+		jumpDests: opcodes.ValidJumpDests(ctx.ByteCode),
 	}
 	buildJumpTable(evm)
 	return evm
@@ -54,6 +57,17 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x13] = opcodes.OpSGT
 	evm.jumpTable[0x14] = opcodes.OpEQ
 	evm.jumpTable[0x15] = opcodes.OpISZERO
+	evm.jumpTable[0x16] = opcodes.OpAND
+	evm.jumpTable[0x17] = opcodes.OpOR
+	evm.jumpTable[0x18] = opcodes.OpXOR
+	evm.jumpTable[0x19] = opcodes.OpNOT
+	evm.jumpTable[0x1b] = opcodes.OpSHL
+	evm.jumpTable[0x1c] = opcodes.OpSHR
+	evm.jumpTable[0x1d] = opcodes.OpSAR
+	evm.jumpTable[0x56] = opcodes.OpJUMP
+	evm.jumpTable[0x57] = opcodes.OpJUMPI
+	evm.jumpTable[0x58] = opcodes.OpPC
+	evm.jumpTable[0x5b] = opcodes.OpJUMPDEST
 	evm.jumpTable[0x50] = opcodes.OpPOP
 	evm.jumpTable[0x51] = opcodes.OpMLOAD
 	evm.jumpTable[0x52] = opcodes.OpMSTORE

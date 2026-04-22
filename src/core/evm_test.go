@@ -216,6 +216,205 @@ func TestSGT(t *testing.T) {
 	})
 }
 
+func TestAND(t *testing.T) {
+	// PUSH1 0x0F, PUSH1 0xFF, AND -> 0xFF & 0x0F = 0x0F
+	code := []byte{0x60, 0x0f, 0x60, 0xff, 0x16, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(0x0f)) != 0 {
+		t.Fatalf("expected 0x0f, got %s", top)
+	}
+}
+
+func TestOR(t *testing.T) {
+	// PUSH1 0x0F, PUSH1 0xF0, OR -> 0xF0 | 0x0F = 0xFF
+	code := []byte{0x60, 0x0f, 0x60, 0xf0, 0x17, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(0xff)) != 0 {
+		t.Fatalf("expected 0xff, got %s", top)
+	}
+}
+
+func TestXOR(t *testing.T) {
+	// PUSH1 0x0F, PUSH1 0xFF, XOR -> 0xFF ^ 0x0F = 0xF0
+	code := []byte{0x60, 0x0f, 0x60, 0xff, 0x18, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(0xf0)) != 0 {
+		t.Fatalf("expected 0xf0, got %s", top)
+	}
+}
+
+func TestNOT(t *testing.T) {
+	// PUSH1 0x00, NOT -> all 256 bits set = 2^256 - 1
+	code := []byte{0x60, 0x00, 0x19, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	// 2^256 - 1
+	expected := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+	if top.Cmp(expected) != 0 {
+		t.Fatalf("expected 2^256-1, got %s", top)
+	}
+}
+
+func TestSHL(t *testing.T) {
+	// PUSH1 0x01 (value), PUSH1 0x01 (shift), SHL -> 1 << 1 = 2
+	code := []byte{0x60, 0x01, 0x60, 0x01, 0x1b, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(2)) != 0 {
+		t.Fatalf("expected 2, got %s", top)
+	}
+}
+
+func TestSHR(t *testing.T) {
+	// PUSH1 0x04 (value), PUSH1 0x01 (shift), SHR -> 4 >> 1 = 2
+	code := []byte{0x60, 0x04, 0x60, 0x01, 0x1c, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(2)) != 0 {
+		t.Fatalf("expected 2, got %s", top)
+	}
+}
+
+func TestSAR(t *testing.T) {
+	t.Run("positive: 4 SAR 1 = 2", func(t *testing.T) {
+		// PUSH1 0x04 (value), PUSH1 0x01 (shift), SAR -> 4 >>s 1 = 2
+		code := []byte{0x60, 0x04, 0x60, 0x01, 0x1d, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		if top.Cmp(big.NewInt(2)) != 0 {
+			t.Fatalf("expected 2, got %s", top)
+		}
+	})
+	t.Run("negative: -4 SAR 1 = -2", func(t *testing.T) {
+		// PUSH32 (2^256 - 4 = -4 in two's complement), PUSH1 0x01, SAR -> -2
+		neg4 := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(4))
+		neg4Bytes := make([]byte, 32)
+		neg4.FillBytes(neg4Bytes)
+		code := append([]byte{0x7f}, neg4Bytes...)
+		code = append(code, 0x60, 0x01, 0x1d, 0x00) // PUSH1 1, SAR, STOP
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		// -2 in unsigned 256-bit = 2^256 - 2
+		expected := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(2))
+		if top.Cmp(expected) != 0 {
+			t.Fatalf("expected 2^256-2 (-2), got %s", top)
+		}
+	})
+}
+
+func TestJUMP(t *testing.T) {
+	// Bytecode layout:
+	// 0x00: PUSH1 0x04  (destination)
+	// 0x02: JUMP
+	// 0x03: 0xfe        (invalid — must be skipped)
+	// 0x04: JUMPDEST
+	// 0x05: PUSH1 0x01  (sentinel: we reached the target)
+	// 0x07: STOP
+	code := []byte{0x60, 0x04, 0x56, 0xfe, 0x5b, 0x60, 0x01, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1 (reached JUMPDEST), got %s", top)
+	}
+}
+
+func TestJUMPInvalidDest(t *testing.T) {
+	// Attempt to jump into PUSH1 data (position 1 is data, not an opcode).
+	// 0x00: PUSH1 0x01  (dest = 1, which is PUSH data, not a valid JUMPDEST)
+	// 0x02: JUMP
+	code := []byte{0x60, 0x01, 0x56}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	_, err := evm.Run()
+	if err == nil {
+		t.Fatal("expected error for invalid jump destination, got nil")
+	}
+}
+
+func TestJUMPI(t *testing.T) {
+	t.Run("condition true: jumps to JUMPDEST", func(t *testing.T) {
+		// Stack for JUMPI: dest on top (µ's[0]), cond below (µ's[1]).
+		// 0x00: PUSH1 0x01   (cond = 1)
+		// 0x02: PUSH1 0x08   (dest = 8)
+		// 0x04: JUMPI
+		// 0x05: PUSH1 0x00   (not reached)
+		// 0x07: STOP         (not reached)
+		// 0x08: JUMPDEST
+		// 0x09: PUSH1 0x01   (sentinel)
+		// 0x0b: STOP
+		code := []byte{0x60, 0x01, 0x60, 0x08, 0x57, 0x60, 0x00, 0x00, 0x5b, 0x60, 0x01, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		if top.Cmp(big.NewInt(1)) != 0 {
+			t.Fatalf("expected 1 (jumped), got %s", top)
+		}
+	})
+	t.Run("condition false: falls through", func(t *testing.T) {
+		// 0x00: PUSH1 0x00   (cond = 0)
+		// 0x02: PUSH1 0x08   (dest = 8, unused)
+		// 0x04: JUMPI         (no jump)
+		// 0x05: PUSH1 0x42   (falls through here)
+		// 0x07: STOP
+		code := []byte{0x60, 0x00, 0x60, 0x08, 0x57, 0x60, 0x42, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		if top.Cmp(big.NewInt(0x42)) != 0 {
+			t.Fatalf("expected 0x42 (fell through), got %s", top)
+		}
+	})
+}
+
+func TestPC(t *testing.T) {
+	// 0x00: PUSH1 0x00  (filler to shift PC opcode to position 2)
+	// 0x02: PC           (pushes 2)
+	// 0x03: STOP
+	code := []byte{0x60, 0x00, 0x58, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Stack has two items: 0x00 (from PUSH1) below, and 2 (from PC) on top.
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(2)) != 0 {
+		t.Fatalf("expected PC=2, got %s", top)
+	}
+}
+
 func TestMSIZE(t *testing.T) {
 	// PUSH1 0x01, PUSH1 0x00, MSTORE (expands memory to 32 bytes), MSIZE -> 32
 	code := []byte{0x60, 0x01, 0x60, 0x00, 0x52, 0x59, 0x00}

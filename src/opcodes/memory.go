@@ -62,7 +62,10 @@ func OpMLOAD(e types.Executor) error {
 	}
 
 	// Push the loaded value onto the stack as a big.Int
-	stack.Push(new(big.Int).SetBytes(data))
+	err = stack.Push(new(big.Int).SetBytes(data))
+	if err != nil {
+		return err
+	}
 	e.SetPC(e.GetPC() + 1)
 	return nil
 }
@@ -101,7 +104,10 @@ func OpMSIZE(e types.Executor) error {
 	memory := e.GetMemory()
 
 	// MSIZE pushes the current size of memory (in bytes) onto the stack
-	stack.Push(new(big.Int).SetUint64(memory.Len()))
+	err := stack.Push(new(big.Int).SetUint64(memory.Len()))
+	if err != nil {
+		return err
+	}
 	e.SetPC(e.GetPC() + 1)
 	return nil
 }

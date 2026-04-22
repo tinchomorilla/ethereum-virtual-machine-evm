@@ -6,9 +6,9 @@ import (
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/types"
 )
 
+// It is safe to share these 2 variables as long as it is only passed as an argument (read-only) to math/big functions and never used as a receiver.
 // two255 is 2^255, the sign boundary for 256-bit two's complement arithmetic.
 var two255 = new(big.Int).Lsh(big.NewInt(1), 255)
-
 // two256 is 2^256, used to convert unsigned values to their signed equivalents.
 var two256 = new(big.Int).Lsh(big.NewInt(1), 256)
 

@@ -55,6 +55,9 @@ func OpMLOAD(e types.Executor) error {
 		return err
 	}
 
+	// EVM spec: MLOAD can grow memory if needed
+	memory.Resize(offset.Uint64() + 32)
+
 	// Read 32 bytes from memory at the specified offset
 	data, err := memory.Get(offset.Uint64(), 32)
 	if err != nil {

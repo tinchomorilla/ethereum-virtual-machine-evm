@@ -48,6 +48,12 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x02] = opcodes.OpMUL
 	evm.jumpTable[0x03] = opcodes.OpSUB
 	evm.jumpTable[0x04] = opcodes.OpDIV
+	evm.jumpTable[0x10] = opcodes.OpLT
+	evm.jumpTable[0x11] = opcodes.OpGT
+	evm.jumpTable[0x12] = opcodes.OpSLT
+	evm.jumpTable[0x13] = opcodes.OpSGT
+	evm.jumpTable[0x14] = opcodes.OpEQ
+	evm.jumpTable[0x15] = opcodes.OpISZERO
 	evm.jumpTable[0x50] = opcodes.OpPOP
 	evm.jumpTable[0x51] = opcodes.OpMLOAD
 	evm.jumpTable[0x52] = opcodes.OpMSTORE

@@ -20,6 +20,9 @@ type Executor interface {
 	GetPC() uint64
 	SetPC(uint64)
 	GetJumpDests() map[uint64]struct{}
+	GetContext() ExecutionContext
+	GetGas() uint64
+	GetReturnData() []byte
 }
 
 // OpCode represents an EVM instruction.
@@ -37,6 +40,7 @@ type Stack interface {
 	Push(d *big.Int) error
 	Pop() (*big.Int, error)
 	Peek(n int) (*big.Int, error)
+	Swap(n int) error
 	Len() int
 }
 
@@ -57,6 +61,33 @@ type MachineState struct {
 	
 	// ReturnData holds the output of the previous sub-context call.
 	ReturnData []byte
+}
+
+// BlockContext holds the block-level information that is constant for every call in a block.
+type BlockContext struct {
+	// Hc: Address of the block beneficiary (miner/validator).
+	Coinbase Address
+
+	// Hs: Unix timestamp of the current block.
+	Timestamp uint64
+
+	// Hi: Current block number.
+	Number uint64
+
+	// Hp: Previous RANDAO mix (post-merge) or difficulty (pre-merge).
+	PrevRandao Hash
+
+	// Hl: Gas limit of the current block.
+	GasLimit uint64
+
+	// ChainID as defined by EIP-155.
+	ChainID *big.Int
+
+	// BaseFee per gas unit for the current block (EIP-1559).
+	BaseFee *big.Int
+
+	// GetHash returns the hash of block n (only valid for the last 256 blocks).
+	GetHash func(uint64) Hash
 }
 
 // ExecutionContext represents the execution environment (tuple I) defined in the Yellow Paper.
@@ -91,6 +122,9 @@ type ExecutionContext struct {
 
 	// StateDB provides access to the global world state.
 	StateDB StateDB
+
+	// Block holds the block-level context for this execution.
+	Block BlockContext
 }
 
 // Memory defines the interface for the EVM volatile memory.

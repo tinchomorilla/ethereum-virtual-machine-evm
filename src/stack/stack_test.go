@@ -39,6 +39,50 @@ func TestStackUnderflow(t *testing.T) {
 	}
 }
 
+// TestSwap verifies the Swap method exchanges the correct positions.
+func TestSwap(t *testing.T) {
+	t.Run("Swap(1) exchanges top two items", func(t *testing.T) {
+		st := New()
+		st.Push(big.NewInt(10))
+		st.Push(big.NewInt(20))
+		if err := st.Swap(1); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := st.Peek(1)
+		second, _ := st.Peek(2)
+		if top.Cmp(big.NewInt(10)) != 0 {
+			t.Errorf("expected top 10, got %s", top)
+		}
+		if second.Cmp(big.NewInt(20)) != 0 {
+			t.Errorf("expected second 20, got %s", second)
+		}
+	})
+	t.Run("Swap(2) exchanges top with third item", func(t *testing.T) {
+		st := New()
+		st.Push(big.NewInt(1))
+		st.Push(big.NewInt(2))
+		st.Push(big.NewInt(3))
+		if err := st.Swap(2); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := st.Peek(1)
+		third, _ := st.Peek(3)
+		if top.Cmp(big.NewInt(1)) != 0 {
+			t.Errorf("expected top 1, got %s", top)
+		}
+		if third.Cmp(big.NewInt(3)) != 0 {
+			t.Errorf("expected third 3, got %s", third)
+		}
+	})
+	t.Run("Swap underflow on insufficient stack", func(t *testing.T) {
+		st := New()
+		st.Push(big.NewInt(1))
+		if err := st.Swap(1); err != ErrStackUnderflow {
+			t.Errorf("expected ErrStackUnderflow, got %v", err)
+		}
+	})
+}
+
 // TestStackLogic verifies the correct LIFO behavior and Peek indexing.
 func TestStackLogic(t *testing.T) {
 	st := New()

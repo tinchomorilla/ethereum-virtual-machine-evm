@@ -60,6 +60,17 @@ func (st *EVMStack) Peek(n int) (*big.Int, error) {
 	return st.data[l-n], nil
 }
 
+// Swap swaps the top element with the (n+1)-th element from the top.
+// Swap(1) exchanges positions 1 and 2, Swap(2) exchanges 1 and 3, etc.
+func (st *EVMStack) Swap(n int) error {
+	l := len(st.data)
+	if n+1 > l {
+		return ErrStackUnderflow
+	}
+	st.data[l-1], st.data[l-1-n] = st.data[l-1-n], st.data[l-1]
+	return nil
+}
+
 // Len returns the current number of items in the stack.
 func (st *EVMStack) Len() int {
 	return len(st.data)

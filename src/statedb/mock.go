@@ -8,8 +8,10 @@ import (
 
 // Account represents an in-memory Ethereum account for the mock DB.
 type Account struct {
-	Balance *big.Int
-	State   map[types.Hash]types.Hash
+	Balance  *big.Int
+	State    map[types.Hash]types.Hash
+	CodeSize uint64
+	CodeHash types.Hash
 }
 
 // MockStateDB implements types.StateDB for testing and early phases.
@@ -24,7 +26,7 @@ func NewMock() *MockStateDB {
 	}
 }
 
-// getOrCreateAccount retrieves an account, creating it if it doesn't exist (for write paths).
+// getOrCreateAccount retrieves an account, creating it if it doesn't exist.
 func (m *MockStateDB) getOrCreateAccount(addr types.Address) *Account {
 	acc, exists := m.accounts[addr]
 	if !exists {
@@ -43,12 +45,10 @@ func (m *MockStateDB) GetBalance(addr types.Address) *big.Int {
 	if !exists {
 		return big.NewInt(0)
 	}
-	// Creates an independent copy, so the caller can do whatever they want with it without corrupting the DB's state.
 	return new(big.Int).Set(acc.Balance)
 }
 
 // AddBalance adds the specified amount to the account's balance.
-// If the account doesn't exist, it will be created with the given balance.
 func (m *MockStateDB) AddBalance(addr types.Address, amount *big.Int) {
 	if amount.Sign() < 0 {
 		panic("AddBalance: negative amount")
@@ -64,7 +64,6 @@ func (m *MockStateDB) SubBalance(addr types.Address, amount *big.Int) {
 }
 
 // GetState retrieves a value from the account's storage.
-// Returns zero hash for non-existent accounts without creating them (read-only, no side effects).
 func (m *MockStateDB) GetState(addr types.Address, key types.Hash) types.Hash {
 	acc, exists := m.accounts[addr]
 	if !exists {
@@ -77,4 +76,34 @@ func (m *MockStateDB) GetState(addr types.Address, key types.Hash) types.Hash {
 func (m *MockStateDB) SetState(addr types.Address, key types.Hash, value types.Hash) {
 	acc := m.getOrCreateAccount(addr)
 	acc.State[key] = value
+}
+
+// GetCodeSize returns the size of the code associated with the given address.
+func (m *MockStateDB) GetCodeSize(addr types.Address) uint64 {
+	acc, exists := m.accounts[addr]
+	if !exists {
+		return 0
+	}
+	return acc.CodeSize
+}
+
+// AddCodeSize sets a mock code size for testing purposes.
+func (m *MockStateDB) AddCodeSize(addr types.Address, size uint64) {
+	acc := m.getOrCreateAccount(addr)
+	acc.CodeSize = size
+}
+
+// GetCodeHash returns the Keccak-256 hash of the code associated with the given address.
+func (m *MockStateDB) GetCodeHash(addr types.Address) types.Hash {
+	acc, exists := m.accounts[addr]
+	if !exists {
+		return types.Hash{} // Returns empty hash if account doesn't exist
+	}
+	return acc.CodeHash
+}
+
+// AddCodeHash sets a mock code hash for testing purposes.
+func (m *MockStateDB) AddCodeHash(addr types.Address, hash types.Hash) {
+	acc := m.getOrCreateAccount(addr)
+	acc.CodeHash = hash
 }

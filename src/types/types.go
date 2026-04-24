@@ -142,7 +142,8 @@ type StateDB interface {
 	GetBalance(addr Address) *big.Int
 	AddBalance(addr Address, amount *big.Int)
 	SubBalance(addr Address, amount *big.Int)
-
+	GetCodeSize(addr Address) uint64
+	GetCodeHash(addr Address) Hash
 	GetState(addr Address, key Hash) Hash
 	SetState(addr Address, key Hash, value Hash)
 }

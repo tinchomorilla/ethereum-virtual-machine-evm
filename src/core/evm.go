@@ -14,12 +14,15 @@ var ErrInvalidOpcode = errors.New("invalid opcode")
 var ErrOutOfGas = errors.New("out of gas")
 
 // Executor interface implementation
-func (evm *EVM) GetStack() types.Stack             { return evm.state.Stack }
-func (evm *EVM) GetMemory() types.Memory           { return evm.state.Memory }
-func (evm *EVM) GetCode() []byte                   { return evm.ctx.ByteCode }
-func (evm *EVM) GetPC() uint64                     { return evm.state.Pc }
-func (evm *EVM) SetPC(pc uint64)                   { evm.state.Pc = pc }
-func (evm *EVM) GetJumpDests() map[uint64]struct{} { return evm.jumpDests }
+func (evm *EVM) GetStack() types.Stack              { return evm.state.Stack }
+func (evm *EVM) GetMemory() types.Memory            { return evm.state.Memory }
+func (evm *EVM) GetCode() []byte                    { return evm.ctx.ByteCode }
+func (evm *EVM) GetPC() uint64                      { return evm.state.Pc }
+func (evm *EVM) SetPC(pc uint64)                    { evm.state.Pc = pc }
+func (evm *EVM) GetJumpDests() map[uint64]struct{}  { return evm.jumpDests }
+func (evm *EVM) GetContext() types.ExecutionContext { return evm.ctx }
+func (evm *EVM) GetGas() uint64                    { return evm.state.Gas }
+func (evm *EVM) GetReturnData() []byte             { return evm.state.ReturnData }
 
 // EVM is the Ethereum Virtual Machine.
 type EVM struct {
@@ -51,6 +54,38 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x02] = opcodes.OpMUL
 	evm.jumpTable[0x03] = opcodes.OpSUB
 	evm.jumpTable[0x04] = opcodes.OpDIV
+	evm.jumpTable[0x05] = opcodes.OpSDIV
+	evm.jumpTable[0x06] = opcodes.OpMOD
+	evm.jumpTable[0x07] = opcodes.OpSMOD
+	evm.jumpTable[0x08] = opcodes.OpADDMOD
+	evm.jumpTable[0x09] = opcodes.OpMULMOD
+	evm.jumpTable[0x0a] = opcodes.OpEXP
+	evm.jumpTable[0x0b] = opcodes.OpSIGNEXTEND
+	evm.jumpTable[0x20] = opcodes.OpKECCAK256
+	evm.jumpTable[0x30] = opcodes.OpADDRESS
+	evm.jumpTable[0x32] = opcodes.OpORIGIN
+	evm.jumpTable[0x33] = opcodes.OpCALLER
+	evm.jumpTable[0x34] = opcodes.OpCALLVALUE
+	evm.jumpTable[0x35] = opcodes.OpCALLDATALOAD
+	evm.jumpTable[0x36] = opcodes.OpCALLDATASIZE
+	evm.jumpTable[0x37] = opcodes.OpCALLDATACOPY
+	evm.jumpTable[0x38] = opcodes.OpCODESIZE
+	evm.jumpTable[0x39] = opcodes.OpCODECOPY
+	evm.jumpTable[0x3a] = opcodes.OpGASPRICE
+	evm.jumpTable[0x3b] = opcodes.OpEXTCODESIZE
+	evm.jumpTable[0x3d] = opcodes.OpRETURNDATASIZE
+	evm.jumpTable[0x3e] = opcodes.OpRETURNDATACOPY
+	evm.jumpTable[0x3f] = opcodes.OpEXTCODEHASH
+	evm.jumpTable[0x40] = opcodes.OpBLOCKHASH
+	evm.jumpTable[0x41] = opcodes.OpCOINBASE
+	evm.jumpTable[0x42] = opcodes.OpTIMESTAMP
+	evm.jumpTable[0x43] = opcodes.OpNUMBER
+	evm.jumpTable[0x44] = opcodes.OpPREVRANDAO
+	evm.jumpTable[0x45] = opcodes.OpGASLIMIT
+	evm.jumpTable[0x46] = opcodes.OpCHAINID
+	evm.jumpTable[0x47] = opcodes.OpSELFBALANCE
+	evm.jumpTable[0x48] = opcodes.OpBASEFEE
+	evm.jumpTable[0x5a] = opcodes.OpGAS
 	evm.jumpTable[0x10] = opcodes.OpLT
 	evm.jumpTable[0x11] = opcodes.OpGT
 	evm.jumpTable[0x12] = opcodes.OpSLT
@@ -73,9 +108,16 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x52] = opcodes.OpMSTORE
 	evm.jumpTable[0x53] = opcodes.OpMSTORE8
 	evm.jumpTable[0x59] = opcodes.OpMSIZE
+	
 
 	for i := range 32 {
 		evm.jumpTable[0x60+i] = opcodes.MakePush(i + 1)
+	}
+	for i := range 16 {
+		evm.jumpTable[0x80+i] = opcodes.MakeDup(i + 1)
+	}
+	for i := range 16 {
+		evm.jumpTable[0x90+i] = opcodes.MakeSwap(i + 1)
 	}
 }
 

@@ -4,7 +4,10 @@ import (
 	"math/big"
 	"testing"
 
+	"golang.org/x/crypto/sha3"
+
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/core"
+	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/statedb"
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/types"
 )
 
@@ -415,6 +418,78 @@ func TestPC(t *testing.T) {
 	}
 }
 
+func TestDUP(t *testing.T) {
+	t.Run("DUP1 duplicates top", func(t *testing.T) {
+		// PUSH1 0x05, DUP1 -> stack: [5, 5], top = 5, len = 2
+		code := []byte{0x60, 0x05, 0x80, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		st := evm.State().Stack
+		if st.Len() != 2 {
+			t.Fatalf("expected stack len 2, got %d", st.Len())
+		}
+		top, _ := st.Peek(1)
+		if top.Cmp(big.NewInt(5)) != 0 {
+			t.Fatalf("expected top 5, got %s", top)
+		}
+	})
+	t.Run("DUP2 duplicates second item", func(t *testing.T) {
+		// PUSH1 0x03, PUSH1 0x05, DUP2 -> stack: [3, 5, 3], top = 3
+		code := []byte{0x60, 0x03, 0x60, 0x05, 0x81, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		st := evm.State().Stack
+		if st.Len() != 3 {
+			t.Fatalf("expected stack len 3, got %d", st.Len())
+		}
+		top, _ := st.Peek(1)
+		if top.Cmp(big.NewInt(3)) != 0 {
+			t.Fatalf("expected top 3 (copy of second item), got %s", top)
+		}
+	})
+}
+
+func TestSWAP(t *testing.T) {
+	t.Run("SWAP1 swaps top two items", func(t *testing.T) {
+		// PUSH1 0x03, PUSH1 0x05, SWAP1 -> stack: [5, 3], top = 3
+		code := []byte{0x60, 0x03, 0x60, 0x05, 0x90, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		st := evm.State().Stack
+		top, _ := st.Peek(1)
+		second, _ := st.Peek(2)
+		if top.Cmp(big.NewInt(3)) != 0 {
+			t.Fatalf("expected top 3, got %s", top)
+		}
+		if second.Cmp(big.NewInt(5)) != 0 {
+			t.Fatalf("expected second 5, got %s", second)
+		}
+	})
+	t.Run("SWAP2 swaps top with third item", func(t *testing.T) {
+		// PUSH1 0x01, PUSH1 0x03, PUSH1 0x05, SWAP2 -> top=1, third=5
+		code := []byte{0x60, 0x01, 0x60, 0x03, 0x60, 0x05, 0x91, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		st := evm.State().Stack
+		top, _ := st.Peek(1)
+		third, _ := st.Peek(3)
+		if top.Cmp(big.NewInt(1)) != 0 {
+			t.Fatalf("expected top 1, got %s", top)
+		}
+		if third.Cmp(big.NewInt(5)) != 0 {
+			t.Fatalf("expected third 5, got %s", third)
+		}
+	})
+}
+
 func TestMSIZE(t *testing.T) {
 	// PUSH1 0x01, PUSH1 0x00, MSTORE (expands memory to 32 bytes), MSIZE -> 32
 	code := []byte{0x60, 0x01, 0x60, 0x00, 0x52, 0x59, 0x00}
@@ -425,5 +500,474 @@ func TestMSIZE(t *testing.T) {
 	top, _ := evm.State().Stack.Peek(1)
 	if top.Cmp(big.NewInt(32)) != 0 {
 		t.Fatalf("expected 32, got %s", top)
+	}
+}
+
+// ── Arithmetic ────────────────────────────────────────────────────────────────
+
+func TestSDIV(t *testing.T) {
+	t.Run("10 / 3 = 3", func(t *testing.T) {
+		// PUSH1 3, PUSH1 10, SDIV → 10/3 = 3
+		code := []byte{0x60, 0x03, 0x60, 0x0a, 0x05, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		if top.Cmp(big.NewInt(3)) != 0 {
+			t.Fatalf("expected 3, got %s", top)
+		}
+	})
+	t.Run("-10 / 3 = -3", func(t *testing.T) {
+		// -10 in 256-bit unsigned = 2^256 - 10
+		neg10 := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(10))
+		neg10b := make([]byte, 32)
+		neg10.FillBytes(neg10b)
+		code := append([]byte{0x60, 0x03, 0x7f}, neg10b...)
+		code = append(code, 0x05, 0x00)
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		// -3 unsigned = 2^256 - 3
+		expected := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(3))
+		if top.Cmp(expected) != 0 {
+			t.Fatalf("expected 2^256-3 (-3), got %s", top)
+		}
+	})
+	t.Run("divide by zero = 0", func(t *testing.T) {
+		code := []byte{0x60, 0x00, 0x60, 0x0a, 0x05, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		if top.Sign() != 0 {
+			t.Fatalf("expected 0, got %s", top)
+		}
+	})
+}
+
+func TestMOD(t *testing.T) {
+	// PUSH1 3, PUSH1 10, MOD → 10 % 3 = 1
+	code := []byte{0x60, 0x03, 0x60, 0x0a, 0x06, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1, got %s", top)
+	}
+}
+
+func TestSMOD(t *testing.T) {
+	t.Run("10 smod 3 = 1", func(t *testing.T) {
+		code := []byte{0x60, 0x03, 0x60, 0x0a, 0x07, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		if top.Cmp(big.NewInt(1)) != 0 {
+			t.Fatalf("expected 1, got %s", top)
+		}
+	})
+	t.Run("-10 smod 3 = -1", func(t *testing.T) {
+		neg10 := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(10))
+		neg10b := make([]byte, 32)
+		neg10.FillBytes(neg10b)
+		code := append([]byte{0x60, 0x03, 0x7f}, neg10b...)
+		code = append(code, 0x07, 0x00)
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		// -1 unsigned = 2^256 - 1
+		expected := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+		if top.Cmp(expected) != 0 {
+			t.Fatalf("expected 2^256-1 (-1), got %s", top)
+		}
+	})
+}
+
+func TestADDMOD(t *testing.T) {
+	// PUSH1 7, PUSH1 5, PUSH1 10, ADDMOD → (10+5)%7 = 1
+	code := []byte{0x60, 0x07, 0x60, 0x05, 0x60, 0x0a, 0x08, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1, got %s", top)
+	}
+}
+
+func TestMULMOD(t *testing.T) {
+	// PUSH1 7, PUSH1 5, PUSH1 4, MULMOD → (4*5)%7 = 6
+	code := []byte{0x60, 0x07, 0x60, 0x05, 0x60, 0x04, 0x09, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(6)) != 0 {
+		t.Fatalf("expected 6, got %s", top)
+	}
+}
+
+func TestEXP(t *testing.T) {
+	// PUSH1 10, PUSH1 2, EXP → 2^10 = 1024
+	code := []byte{0x60, 0x0a, 0x60, 0x02, 0x0a, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(1024)) != 0 {
+		t.Fatalf("expected 1024, got %s", top)
+	}
+}
+
+func TestSIGNEXTEND(t *testing.T) {
+	t.Run("sign bit 1: 0xFF with b=0 extends to all 1s", func(t *testing.T) {
+		// PUSH1 0xFF, PUSH1 0x00, SIGNEXTEND → 2^256-1
+		code := []byte{0x60, 0xff, 0x60, 0x00, 0x0b, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		expected := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+		if top.Cmp(expected) != 0 {
+			t.Fatalf("expected 2^256-1, got %s", top)
+		}
+	})
+	t.Run("sign bit 0: 0x7F with b=0 stays 0x7F", func(t *testing.T) {
+		code := []byte{0x60, 0x7f, 0x60, 0x00, 0x0b, 0x00}
+		evm := core.New(types.ExecutionContext{ByteCode: code})
+		if _, err := evm.Run(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		top, _ := evm.State().Stack.Peek(1)
+		if top.Cmp(big.NewInt(0x7f)) != 0 {
+			t.Fatalf("expected 0x7f, got %s", top)
+		}
+	})
+}
+
+// ── Crypto ────────────────────────────────────────────────────────────────────
+
+func TestKECCAK256(t *testing.T) {
+	// Store 0xFFFF (2 bytes) at memory offset 0, then KECCAK256(offset=0, size=2).
+	// Expected: keccak256(0xff, 0xff)
+	//
+	// PUSH2 0xFFFF, PUSH1 0x00, MSTORE  → stores 0xFFFF right-aligned in 32-byte slot
+	// PUSH1 0x02,   PUSH1 0x1e, KECCAK256 → hash bytes at offset 30 (where 0xFFFF sits)
+	code := []byte{
+		0x61, 0xff, 0xff, // PUSH2 0xFFFF
+		0x60, 0x00, // PUSH1 0x00
+		0x52,             // MSTORE
+		0x60, 0x02,       // PUSH1 2 (size)
+		0x60, 0x1e,       // PUSH1 30 (offset: MSTORE places value at bytes 30-31)
+		0x20,             // KECCAK256
+		0x00,             // STOP
+	}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	h := sha3.NewLegacyKeccak256()
+	h.Write([]byte{0xff, 0xff})
+	expected := new(big.Int).SetBytes(h.Sum(nil))
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(expected) != 0 {
+		t.Fatalf("expected %s, got %s", expected, top)
+	}
+}
+
+// ── Environment (opcodes/env.go) ─────────────────────────────────────────────────────
+
+func TestADDRESS(t *testing.T) {
+	var addr types.Address
+	addr[19] = 0xab
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x30, 0x00}, Address: addr})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(new(big.Int).SetBytes(addr[:])) != 0 {
+		t.Fatalf("expected %s, got %s", new(big.Int).SetBytes(addr[:]), top)
+	}
+}
+
+func TestCALLER(t *testing.T) {
+	var caller types.Address
+	caller[19] = 0xcd
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x33, 0x00}, Caller: caller})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(new(big.Int).SetBytes(caller[:])) != 0 {
+		t.Fatalf("expected %s, got %s", new(big.Int).SetBytes(caller[:]), top)
+	}
+}
+
+func TestCALLVALUE(t *testing.T) {
+	value := big.NewInt(1000)
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x34, 0x00}, Value: value})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(value) != 0 {
+		t.Fatalf("expected %s, got %s", value, top)
+	}
+}
+
+func TestCALLDATALOAD(t *testing.T) {
+	// Input: 32 bytes with 0x42 at byte 0
+	input := make([]byte, 32)
+	input[0] = 0x42
+	// PUSH1 0x00, CALLDATALOAD → loads input[0:32]
+	code := []byte{0x60, 0x00, 0x35, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Input: input})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	expected := new(big.Int).SetBytes(input)
+	if top.Cmp(expected) != 0 {
+		t.Fatalf("expected %s, got %s", expected, top)
+	}
+}
+
+func TestCALLDATASIZE(t *testing.T) {
+	input := []byte{0x01, 0x02, 0x03}
+	code := []byte{0x36, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Input: input})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(3)) != 0 {
+		t.Fatalf("expected 3, got %s", top)
+	}
+}
+
+func TestCODESIZE(t *testing.T) {
+	// CODESIZE, STOP — code is 2 bytes long
+	code := []byte{0x38, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(2)) != 0 {
+		t.Fatalf("expected 2, got %s", top)
+	}
+}
+
+func TestGASPRICE(t *testing.T) {
+	price := big.NewInt(20_000_000_000)
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x3a, 0x00}, GasPrice: price})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(price) != 0 {
+		t.Fatalf("expected %s, got %s", price, top)
+	}
+}
+
+func TestGAS(t *testing.T) {
+	// GAS pushes remaining gas after deducting the GAS opcode's own cost (GBase=2).
+	code := []byte{0x5a, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code})
+	before := evm.State().Gas
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	// Gas deducted for the GAS opcode (cost = GBase = 2) before OpGAS runs
+	expected := new(big.Int).SetUint64(before - 2)
+	if top.Cmp(expected) != 0 {
+		t.Fatalf("expected %s, got %s", expected, top)
+	}
+}
+
+// ── Block info ────────────────────────────────────────────────────────────────
+
+func blockCtx() types.BlockContext {
+	return types.BlockContext{
+		Coinbase:   types.Address{0xc0},
+		Timestamp:  1_700_000_000,
+		Number:     19_000_000,
+		PrevRandao: types.Hash{0xde, 0xad},
+		GasLimit:   30_000_000,
+		ChainID:    big.NewInt(1),
+		BaseFee:    big.NewInt(10_000_000_000),
+		GetHash: func(n uint64) types.Hash {
+			var h types.Hash
+			h[0] = byte(n)
+			return h
+		},
+	}
+}
+
+func TestCOINBASE(t *testing.T) {
+	bc := blockCtx()
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x41, 0x00}, Block: bc})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(new(big.Int).SetBytes(bc.Coinbase[:])) != 0 {
+		t.Fatalf("unexpected coinbase: %s", top)
+	}
+}
+
+func TestTIMESTAMP(t *testing.T) {
+	bc := blockCtx()
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x42, 0x00}, Block: bc})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(new(big.Int).SetUint64(bc.Timestamp)) != 0 {
+		t.Fatalf("expected %d, got %s", bc.Timestamp, top)
+	}
+}
+
+func TestNUMBER(t *testing.T) {
+	bc := blockCtx()
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x43, 0x00}, Block: bc})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(new(big.Int).SetUint64(bc.Number)) != 0 {
+		t.Fatalf("expected %d, got %s", bc.Number, top)
+	}
+}
+
+func TestGASLIMIT(t *testing.T) {
+	bc := blockCtx()
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x45, 0x00}, Block: bc})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(new(big.Int).SetUint64(bc.GasLimit)) != 0 {
+		t.Fatalf("expected %d, got %s", bc.GasLimit, top)
+	}
+}
+
+func TestCHAINID(t *testing.T) {
+	bc := blockCtx()
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x46, 0x00}, Block: bc})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(bc.ChainID) != 0 {
+		t.Fatalf("expected %s, got %s", bc.ChainID, top)
+	}
+}
+
+func TestBASEFEE(t *testing.T) {
+	bc := blockCtx()
+	evm := core.New(types.ExecutionContext{ByteCode: []byte{0x48, 0x00}, Block: bc})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(bc.BaseFee) != 0 {
+		t.Fatalf("expected %s, got %s", bc.BaseFee, top)
+	}
+}
+
+func TestBLOCKHASH(t *testing.T) {
+	bc := blockCtx() // GetHash(n) returns hash with hash[0]=byte(n)
+	// PUSH1 0x05, BLOCKHASH → hash of block 5 → hash[0]=5
+	code := []byte{0x60, 0x05, 0x40, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Block: bc})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	var expected types.Hash
+	expected[0] = 5
+	if top.Cmp(new(big.Int).SetBytes(expected[:])) != 0 {
+		t.Fatalf("unexpected blockhash: %s", top)
+	}
+}
+
+func TestSELFBALANCE(t *testing.T) {
+	var addr types.Address
+	addr[19] = 0x01
+	db := statedb.NewMock()
+	db.AddBalance(addr, big.NewInt(5000))
+	code := []byte{0x47, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Address: addr, StateDB: db})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(5000)) != 0 {
+		t.Fatalf("expected 5000, got %s", top)
+	}
+}
+
+
+func TestEXTCODESIZE(t *testing.T) {
+	var targetAddr types.Address
+	targetAddr[19] = 0x99 // Mock address ending in 0x99
+
+	db := statedb.NewMock()
+	// Simulating that the target contract has a bytecode of 128 bytes
+	db.AddCodeSize(targetAddr, 128) 
+
+	// PUSH1 0x99 (target address), EXTCODESIZE -> pushes 128
+	code := []byte{0x60, 0x99, 0x3b, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code, StateDB: db})
+	
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(128)) != 0 {
+		t.Fatalf("expected 128, got %s", top)
+	}
+}
+
+func TestEXTCODEHASH(t *testing.T) {
+	var targetAddr types.Address
+	targetAddr[19] = 0x88 // Mock address ending in 0x88
+
+	// Create a dummy code hash
+	var expectedHash types.Hash
+	expectedHash[0] = 0xaa
+	expectedHash[31] = 0xbb
+
+	db := statedb.NewMock()
+	db.AddCodeHash(targetAddr, expectedHash)
+
+	// PUSH1 0x88 (target address), EXTCODEHASH -> pushes expectedHash
+	code := []byte{0x60, 0x88, 0x3f, 0x00}
+	evm := core.New(types.ExecutionContext{ByteCode: code, StateDB: db})
+	
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(new(big.Int).SetBytes(expectedHash[:])) != 0 {
+		t.Fatalf("expected %x, got %x", expectedHash, top.Bytes())
 	}
 }

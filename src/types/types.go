@@ -20,22 +20,21 @@ type Address [20]byte
 // Hash represents the 32-byte Keccak-256 hash.
 type Hash [32]byte
 
-
 // MachineState holds the volatile, execution-specific state of the EVM.
 // It is completely wiped after the execution halts.
 type MachineState struct {
 	// Pc is the Program Counter, indicating the current instruction index.
 	Pc uint64
-	
+
 	// Gas is the available gas for the current execution context.
 	Gas uint64
-	
+
 	// Stack is the 1024-item execution stack.
 	Stack Stack
-	
+
 	// Memory is the volatile, expandable byte array.
 	Memory Memory
-	
+
 	// ReturnData holds the output of the previous sub-context call.
 	ReturnData []byte
 }
@@ -72,28 +71,28 @@ type BlockContext struct {
 type ExecutionContext struct {
 	// Ia: The address of the account which owns the code that is executing.
 	Address Address
-	
+
 	// Io: The sender address of the transaction that originated this execution.
 	Origin Address
 
 	// Ip: The price of gas paid by the signer of the transaction.
 	GasPrice *big.Int
-	
+
 	// Id: The byte array that is the input data to this execution (calldata).
 	Input []byte
-	
+
 	// Is: The address of the account which caused the code to be executing (caller).
 	Caller Address
-	
+
 	// Iv: The value, in Wei, passed to this account as part of the execution.
 	Value *big.Int
-	
+
 	// Ib: The byte array that is the machine code to be executed.
 	ByteCode []byte
-	
+
 	// Ie: The depth of the present message-call or contract-creation.
 	Depth int
-	
+
 	// Iw: The permission to make modifications to the state (false for STATICCALL).
 	ReadOnly bool
 
@@ -138,6 +137,14 @@ type Stack interface {
 	Len() int
 }
 
+// AccruedSubstate exposes substate operations needed during execution
+type AccruedSubstate interface {
+	IsWarmAddress(Address) bool
+	IsWarmStorage(Address, Hash) bool
+	WarmUpAddress(Address)
+	WarmUpStorage(Address, Hash)
+}
+
 // Executor is the interface opcode implementations use to interact with the EVM.
 // It decouples the opcodes package from the core package, avoiding circular imports.
 type Executor interface {
@@ -150,4 +157,5 @@ type Executor interface {
 	GetContext() ExecutionContext
 	GetGas() uint64
 	GetReturnData() []byte
+	GetAccruedSubstate() AccruedSubstate
 }

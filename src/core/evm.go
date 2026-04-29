@@ -7,6 +7,7 @@ import (
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/memory"
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/opcodes"
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/stack"
+	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/substate"
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/types"
 )
 
@@ -21,15 +22,19 @@ func (evm *EVM) GetPC() uint64                      { return evm.state.Pc }
 func (evm *EVM) SetPC(pc uint64)                    { evm.state.Pc = pc }
 func (evm *EVM) GetJumpDests() map[uint64]struct{}  { return evm.jumpDests }
 func (evm *EVM) GetContext() types.ExecutionContext { return evm.ctx }
-func (evm *EVM) GetGas() uint64                    { return evm.state.Gas }
-func (evm *EVM) GetReturnData() []byte             { return evm.state.ReturnData }
+func (evm *EVM) GetGas() uint64                     { return evm.state.Gas }
+func (evm *EVM) GetReturnData() []byte              { return evm.state.ReturnData }
+func (evm *EVM) GetAccruedSubstate() types.AccruedSubstate {
+	return evm.accruedSubstate
+}
 
 // EVM is the Ethereum Virtual Machine.
 type EVM struct {
-	ctx       types.ExecutionContext
-	state     types.MachineState
-	jumpTable [256]types.OpFunc
-	jumpDests map[uint64]struct{}
+	ctx             types.ExecutionContext
+	state           types.MachineState
+	accruedSubstate *substate.AccruedSubstate
+	jumpTable       [256]types.OpFunc
+	jumpDests       map[uint64]struct{}
 }
 
 // New creates a new EVM instance ready to execute the given context.
@@ -42,7 +47,8 @@ func New(ctx types.ExecutionContext) *EVM {
 			Stack:  stack.New(),
 			Memory: memory.New(),
 		},
-		jumpDests: opcodes.ValidJumpDests(ctx.ByteCode),
+		accruedSubstate: substate.NewAccruedSubstate(),
+		jumpDests:       opcodes.ValidJumpDests(ctx.ByteCode),
 	}
 	buildJumpTable(evm)
 	return evm
@@ -108,7 +114,6 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x52] = opcodes.OpMSTORE
 	evm.jumpTable[0x53] = opcodes.OpMSTORE8
 	evm.jumpTable[0x59] = opcodes.OpMSIZE
-	
 
 	for i := range 32 {
 		evm.jumpTable[0x60+i] = opcodes.MakePush(i + 1)

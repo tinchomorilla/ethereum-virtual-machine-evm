@@ -8,6 +8,9 @@ import (
 // ErrStopExecution signals a normal STOP halt (not a real error).
 var ErrStopExecution = errors.New("stop execution")
 
+// ErrWriteProtection is returned when a state-modifying opcode executes in a read-only context.
+var ErrWriteProtection = errors.New("write protection")
+
 // OpFunc is a function that implements a single EVM opcode.
 type OpFunc func(Executor) error
 
@@ -19,6 +22,13 @@ type Address [20]byte
 
 // Hash represents the 32-byte Keccak-256 hash.
 type Hash [32]byte
+
+// bigIntToHash converts a stack big.Int to a Hash
+func BigIntToHash(b *big.Int) Hash {
+	var h Hash
+	b.FillBytes(h[:])
+	return h
+}
 
 // MachineState holds the volatile, execution-specific state of the EVM.
 // It is completely wiped after the execution halts.
@@ -143,6 +153,8 @@ type AccruedSubstate interface {
 	IsWarmStorage(Address, Hash) bool
 	WarmUpAddress(Address)
 	WarmUpStorage(Address, Hash)
+	AddRefund(uint64)
+	SubRefund(uint64)
 }
 
 // Executor is the interface opcode implementations use to interact with the EVM.

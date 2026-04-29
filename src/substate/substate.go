@@ -4,12 +4,9 @@ import (
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/types"
 )
 
-
-// TODO: In the future, I need to implement variable inheritance 
-// between the parent and child. Right now, the child is borned with empty variables, 
+// TODO: In the future, I need to implement variable inheritance
+// between the parent and child. Right now, the child is borned with empty variables,
 // which is incorrect.
-
-
 
 // StorageKey identifies a single storage slot: a (address, slot) pair.
 // Used as the key type for the warm-storage set AK.
@@ -117,4 +114,14 @@ func (a *AccruedSubstate) WarmUpAddress(addr types.Address) {
 // WarmUpStorage adds the (addr, slot) pair to the warm storage set AK.
 func (a *AccruedSubstate) WarmUpStorage(addr types.Address, slot types.Hash) {
 	a.WarmStorage[StorageKey{addr, slot}] = true
+}
+
+// AddRefund adds the given amount to the accumulated refund counter Ar.
+func (a *AccruedSubstate) AddRefund(amount uint64) {
+	a.Refund += amount
+}
+
+// SubRefund subtracts the given amount from the accumulated refund counter Ar.
+func (a *AccruedSubstate) SubRefund(amount uint64) {
+	a.Refund -= amount
 }

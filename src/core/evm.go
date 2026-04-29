@@ -113,6 +113,8 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x51] = opcodes.OpMLOAD
 	evm.jumpTable[0x52] = opcodes.OpMSTORE
 	evm.jumpTable[0x53] = opcodes.OpMSTORE8
+	evm.jumpTable[0x54] = opcodes.OpSLOAD
+	evm.jumpTable[0x55] = opcodes.OpSSTORE
 	evm.jumpTable[0x59] = opcodes.OpMSIZE
 
 	for i := range 32 {

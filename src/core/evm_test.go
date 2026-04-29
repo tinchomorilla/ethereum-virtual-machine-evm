@@ -946,6 +946,139 @@ func TestEXTCODESIZE(t *testing.T) {
 	}
 }
 
+func TestSLOAD_ColdSlot(t *testing.T) {
+	db := statedb.NewMock()
+	var addr types.Address
+	addr[19] = 0x01
+	code := []byte{
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x54,       // SLOAD
+		0x00,       // STOP
+	}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Address: addr, StateDB: db})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Sign() != 0 {
+		t.Fatalf("expected zero, got %s", top)
+	}
+}
+
+func TestSLOAD_PreexistingValue(t *testing.T) {
+	db := statedb.NewMock()
+	var addr types.Address
+	addr[19] = 0x01
+	var key types.Hash
+	key[31] = 0x01
+	var val types.Hash
+	val[31] = 0xAB
+	db.SetState(addr, key, val)
+
+	code := []byte{
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x54,       // SLOAD
+		0x00,       // STOP
+	}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Address: addr, StateDB: db})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	expected := new(big.Int).SetBytes(val[:])
+	if top.Cmp(expected) != 0 {
+		t.Fatalf("expected %x, got %x", val, top.Bytes())
+	}
+}
+
+func TestSLOAD_WarmsUpSlot(t *testing.T) {
+	db := statedb.NewMock()
+	var addr types.Address
+	addr[19] = 0x01
+	code := []byte{
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x54,       // SLOAD
+		0x00,       // STOP
+	}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Address: addr, StateDB: db})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var slot types.Hash
+	slot[31] = 0x01
+	if !evm.GetAccruedSubstate().IsWarmStorage(addr, slot) {
+		t.Fatal("expected slot to be warm after SLOAD")
+	}
+}
+
+func TestSSTORE_WritesValue(t *testing.T) {
+	db := statedb.NewMock()
+	var addr types.Address
+	addr[19] = 0x01
+	code := []byte{
+		0x60, 0xff, // PUSH1 0xFF (value)
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x55,       // SSTORE
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x54,       // SLOAD
+		0x00,       // STOP
+	}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Address: addr, StateDB: db})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(0xff)) != 0 {
+		t.Fatalf("expected 0xff, got %s", top)
+	}
+}
+
+func TestSSTORE_WarmsUpSlot(t *testing.T) {
+	db := statedb.NewMock()
+	var addr types.Address
+	addr[19] = 0x01
+	code := []byte{
+		0x60, 0xff, // PUSH1 0xFF (value)
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x55,       // SSTORE
+		0x00,       // STOP
+	}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Address: addr, StateDB: db})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var slot types.Hash
+	slot[31] = 0x01
+	if !evm.GetAccruedSubstate().IsWarmStorage(addr, slot) {
+		t.Fatal("expected slot to be warm after SSTORE")
+	}
+}
+
+func TestSSTORE_OverwriteValue(t *testing.T) {
+	db := statedb.NewMock()
+	var addr types.Address
+	addr[19] = 0x01
+	code := []byte{
+		0x60, 0xaa, // PUSH1 0xAA (value A)
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x55,       // SSTORE
+		0x60, 0xbb, // PUSH1 0xBB (value B)
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x55,       // SSTORE
+		0x60, 0x01, // PUSH1 0x01 (key)
+		0x54,       // SLOAD
+		0x00,       // STOP
+	}
+	evm := core.New(types.ExecutionContext{ByteCode: code, Address: addr, StateDB: db})
+	if _, err := evm.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(0xbb)) != 0 {
+		t.Fatalf("expected 0xbb, got %s", top)
+	}
+}
+
 func TestEXTCODEHASH(t *testing.T) {
 	var targetAddr types.Address
 	targetAddr[19] = 0x88 // Mock address ending in 0x88

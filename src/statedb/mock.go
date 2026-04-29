@@ -8,10 +8,11 @@ import (
 
 // Account represents an in-memory Ethereum account for the mock DB.
 type Account struct {
-	Balance  *big.Int
-	State    map[types.Hash]types.Hash
-	CodeSize uint64
-	CodeHash types.Hash
+	Balance        *big.Int
+	State          map[types.Hash]types.Hash
+	CodeSize       uint64
+	CodeHash       types.Hash
+	CommittedState map[types.Hash]types.Hash
 }
 
 // MockStateDB implements types.StateDB for testing and early phases.
@@ -31,8 +32,9 @@ func (m *MockStateDB) getOrCreateAccount(addr types.Address) *Account {
 	acc, exists := m.accounts[addr]
 	if !exists {
 		acc = &Account{
-			Balance: big.NewInt(0),
-			State:   make(map[types.Hash]types.Hash),
+			Balance:        big.NewInt(0),
+			State:          make(map[types.Hash]types.Hash),
+			CommittedState: make(map[types.Hash]types.Hash),
 		}
 		m.accounts[addr] = acc
 	}
@@ -73,9 +75,26 @@ func (m *MockStateDB) GetState(addr types.Address, key types.Hash) types.Hash {
 }
 
 // SetState sets a value in the account's storage.
+// On first write to a slot, snapshots the pre-transaction value into CommittedState.
 func (m *MockStateDB) SetState(addr types.Address, key types.Hash, value types.Hash) {
 	acc := m.getOrCreateAccount(addr)
+	if _, alreadySnapped := acc.CommittedState[key]; !alreadySnapped {
+		acc.CommittedState[key] = acc.State[key]
+	}
 	acc.State[key] = value
+}
+
+// GetCommittedState returns the value of a storage slot as it was at the
+// beginning of the current transaction (v0 in EIP-2200's SSTORE gas formula).
+func (m *MockStateDB) GetCommittedState(addr types.Address, key types.Hash) types.Hash {
+	acc, exists := m.accounts[addr]
+	if !exists {
+		return types.Hash{}
+	}
+	if committed, wasSnapped := acc.CommittedState[key]; wasSnapped {
+		return committed
+	}
+	return acc.State[key]
 }
 
 // GetCodeSize returns the size of the code associated with the given address.

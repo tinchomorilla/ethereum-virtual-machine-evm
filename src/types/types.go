@@ -11,20 +11,6 @@ var ErrStopExecution = errors.New("stop execution")
 // OpFunc is a function that implements a single EVM opcode.
 type OpFunc func(Executor) error
 
-// Executor is the interface opcode implementations use to interact with the EVM.
-// It decouples the opcodes package from the core package, avoiding circular imports.
-type Executor interface {
-	GetStack() Stack
-	GetMemory() Memory
-	GetCode() []byte
-	GetPC() uint64
-	SetPC(uint64)
-	GetJumpDests() map[uint64]struct{}
-	GetContext() ExecutionContext
-	GetGas() uint64
-	GetReturnData() []byte
-}
-
 // OpCode represents an EVM instruction.
 type OpCode byte
 
@@ -34,15 +20,6 @@ type Address [20]byte
 // Hash represents the 32-byte Keccak-256 hash.
 type Hash [32]byte
 
-// Stack defines the interface for the EVM execution stack.
-// The EVM stack can hold up to 1024 items, each being a 256-bit word.
-type Stack interface {
-	Push(d *big.Int) error
-	Pop() (*big.Int, error)
-	Peek(n int) (*big.Int, error)
-	Swap(n int) error
-	Len() int
-}
 
 // MachineState holds the volatile, execution-specific state of the EVM.
 // It is completely wiped after the execution halts.
@@ -127,6 +104,8 @@ type ExecutionContext struct {
 	Block BlockContext
 }
 
+//------------------------ Interfaces -----------------------------------------//
+
 // Memory defines the interface for the EVM volatile memory.
 // Memory is a byte array that expands as needed, incurring a gas cost.
 type Memory interface {
@@ -146,4 +125,29 @@ type StateDB interface {
 	GetCodeHash(addr Address) Hash
 	GetState(addr Address, key Hash) Hash
 	SetState(addr Address, key Hash, value Hash)
+	GetCommittedState(addr Address, key Hash) Hash
+}
+
+// Stack defines the interface for the EVM execution stack.
+// The EVM stack can hold up to 1024 items, each being a 256-bit word.
+type Stack interface {
+	Push(d *big.Int) error
+	Pop() (*big.Int, error)
+	Peek(n int) (*big.Int, error)
+	Swap(n int) error
+	Len() int
+}
+
+// Executor is the interface opcode implementations use to interact with the EVM.
+// It decouples the opcodes package from the core package, avoiding circular imports.
+type Executor interface {
+	GetStack() Stack
+	GetMemory() Memory
+	GetCode() []byte
+	GetPC() uint64
+	SetPC(uint64)
+	GetJumpDests() map[uint64]struct{}
+	GetContext() ExecutionContext
+	GetGas() uint64
+	GetReturnData() []byte
 }

@@ -140,20 +140,24 @@ func (evm *EVM) Run() ([]byte, error) {
 	for {
 		pc := evm.state.Pc
 		if pc >= uint64(len(code)) {
+			evm.state.Gas = 0
 			return nil, ErrInvalidOpcode
 		}
 
 		opcode := types.OpCode(code[pc])
 		fn := evm.jumpTable[opcode]
 		if fn == nil {
+			evm.state.Gas = 0
 			return nil, ErrInvalidOpcode
 		}
 
 		cost, err := gas.Cost(opcode, evm)
 		if err != nil {
+			evm.state.Gas = 0
 			return nil, err
 		}
 		if evm.state.Gas < cost {
+			evm.state.Gas = 0
 			return nil, ErrOutOfGas
 		}
 		evm.state.Gas -= cost
@@ -162,6 +166,7 @@ func (evm *EVM) Run() ([]byte, error) {
 			if errors.Is(err, types.ErrStopExecution) {
 				return evm.state.ReturnData, nil
 			}
+			evm.state.Gas = 0
 			return nil, err
 		}
 	}

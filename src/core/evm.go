@@ -38,12 +38,12 @@ type EVM struct {
 }
 
 // New creates a new EVM instance ready to execute the given context.
-func New(ctx types.ExecutionContext) *EVM {
+func New(ctx types.ExecutionContext, initialGas uint64) *EVM {
 	evm := &EVM{
 		ctx: ctx,
 		state: types.MachineState{
 			Pc:     0,
-			Gas:    ^uint64(0), // start with max uint64 gas
+			Gas:    initialGas, // start with the provided initial gas
 			Stack:  stack.New(),
 			Memory: memory.New(),
 		},

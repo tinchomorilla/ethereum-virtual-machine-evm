@@ -9,43 +9,43 @@ import (
 // MakeDup returns an OpFunc for DUP_n: duplicates the n-th item from the top.
 // DUP1 (n=1) duplicates the top, DUP16 (n=16) duplicates the 16th item.
 func MakeDup(n int) types.OpFunc {
-	return func(e types.Executor) error {
+	return func(e types.Executor) (types.OpResult, error) {
 		val, err := e.GetStack().Peek(n)
 		if err != nil {
-			return err
+			return types.OpResult{}, err
 		}
 		if err := e.GetStack().Push(new(big.Int).Set(val)); err != nil {
-			return err
+			return types.OpResult{}, err
 		}
 		e.SetPC(e.GetPC() + 1)
-		return nil
+		return types.OpResult{}, nil
 	}
 }
 
 // MakeSwap returns an OpFunc for SWAP_n: swaps the top with the (n+1)-th item.
 // SWAP1 (n=1) swaps positions 1 and 2, SWAP16 (n=16) swaps positions 1 and 17.
 func MakeSwap(n int) types.OpFunc {
-	return func(e types.Executor) error {
+	return func(e types.Executor) (types.OpResult, error) {
 		if err := e.GetStack().Swap(n); err != nil {
-			return err
+			return types.OpResult{}, err
 		}
 		e.SetPC(e.GetPC() + 1)
-		return nil
+		return types.OpResult{}, nil
 	}
 }
 
-func OpPOP(e types.Executor) error {
+func OpPOP(e types.Executor) (types.OpResult, error) {
 	_, err := e.GetStack().Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }
 
 // MakePush returns an OpFunc that pushes n bytes from bytecode onto the stack.
 func MakePush(n int) types.OpFunc {
-	return func(e types.Executor) error {
+	return func(e types.Executor) (types.OpResult, error) {
 		code := e.GetCode()
 		start := e.GetPC() + 1
 		end := start + uint64(n)
@@ -62,8 +62,9 @@ func MakePush(n int) types.OpFunc {
 		}
 
 		e.SetPC(e.GetPC() + uint64(n) + 1)
-		return e.GetStack().Push(new(big.Int).SetBytes(val))
+		if err := e.GetStack().Push(new(big.Int).SetBytes(val)); err != nil {
+			return types.OpResult{}, err
+		}
+		return types.OpResult{}, nil
 	}
 }
-
-

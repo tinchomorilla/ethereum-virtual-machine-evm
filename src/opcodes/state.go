@@ -20,44 +20,44 @@ func toAddress(b *big.Int) types.Address {
 
 // OpEXTCODESIZE implements the EXTCODESIZE opcode (0x3b).
 // Pops an address from the stack and pushes the byte size of that account's code.
-func OpEXTCODESIZE(e types.Executor) error {
+func OpEXTCODESIZE(e types.Executor) (types.OpResult, error) {
 	addrInt, err := e.GetStack().Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
-	
+
 	addr := toAddress(addrInt)
 	var size uint64
-	
+
 	if e.GetContext().StateDB != nil {
 		size = e.GetContext().StateDB.GetCodeSize(addr)
 	}
-	
+
 	if err := e.GetStack().Push(new(big.Int).SetUint64(size)); err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }
 
 // OpEXTCODEHASH implements the EXTCODEHASH opcode (0x3f).
 // Pops an address from the stack and pushes the Keccak-256 hash of that account's code.
-func OpEXTCODEHASH(e types.Executor) error {
+func OpEXTCODEHASH(e types.Executor) (types.OpResult, error) {
 	addrInt, err := e.GetStack().Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
-	
+
 	addr := toAddress(addrInt)
 	var hash types.Hash
-	
+
 	if e.GetContext().StateDB != nil {
 		hash = e.GetContext().StateDB.GetCodeHash(addr)
 	}
-	
+
 	if err := e.GetStack().Push(new(big.Int).SetBytes(hash[:])); err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }

@@ -14,18 +14,18 @@ func padTo32Bytes(val *big.Int) []byte {
 	return val.FillBytes(buf)
 }
 
-func OpMSTORE(e types.Executor) error {
+func OpMSTORE(e types.Executor) (types.OpResult, error) {
 	stack := e.GetStack()
 	memory := e.GetMemory()
 
 	// MSTORE takes two arguments: offset and value
 	offset, err := stack.Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	value, err := stack.Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 
 	// Pad the value to 32 bytes (1 word)
@@ -37,22 +37,22 @@ func OpMSTORE(e types.Executor) error {
 	// Write the padded value to memory at the specified offset
 	err = memory.Set(offset.Uint64(), 32, paddedValue)
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 
 }
 
-func OpMLOAD(e types.Executor) error {
+func OpMLOAD(e types.Executor) (types.OpResult, error) {
 	stack := e.GetStack()
 	memory := e.GetMemory()
 
 	// MLOAD takes one argument: offset
 	offset, err := stack.Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 
 	// EVM spec: MLOAD can grow memory if needed
@@ -61,30 +61,30 @@ func OpMLOAD(e types.Executor) error {
 	// Read 32 bytes from memory at the specified offset
 	data, err := memory.Get(offset.Uint64(), 32)
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 
 	// Push the loaded value onto the stack as a big.Int
 	err = stack.Push(new(big.Int).SetBytes(data))
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }
 
-func OpMSTORE8(e types.Executor) error {
+func OpMSTORE8(e types.Executor) (types.OpResult, error) {
 	stack := e.GetStack()
 	memory := e.GetMemory()
 
 	// MSTORE8 takes two arguments: offset and value
 	offset, err := stack.Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	value, err := stack.Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 
 	// Write the least significant byte of the value to memory at the specified offset
@@ -95,22 +95,22 @@ func OpMSTORE8(e types.Executor) error {
 
 	err = memory.Set(offset.Uint64(), 1, []byte{byteValue})
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }
 
-func OpMSIZE(e types.Executor) error {
+func OpMSIZE(e types.Executor) (types.OpResult, error) {
 	stack := e.GetStack()
 	memory := e.GetMemory()
 
 	// MSIZE pushes the current size of memory (in bytes) onto the stack
 	err := stack.Push(new(big.Int).SetUint64(memory.Len()))
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }

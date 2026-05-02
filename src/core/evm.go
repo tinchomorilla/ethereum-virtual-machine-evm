@@ -55,7 +55,7 @@ func New(ctx types.ExecutionContext, initialGas uint64) *EVM {
 }
 
 func buildJumpTable(evm *EVM) {
-	evm.jumpTable[0x00] = opSTOP
+	evm.jumpTable[0x00] = opcodes.OpSTOP
 	evm.jumpTable[0x01] = opcodes.OpADD
 	evm.jumpTable[0x02] = opcodes.OpMUL
 	evm.jumpTable[0x03] = opcodes.OpSUB
@@ -135,43 +135,41 @@ func (evm *EVM) State() *types.MachineState {
 
 // Run executes the bytecode until STOP, an error occurs or it runs out of gas.
 // It returns the output data or an error.
-func (evm *EVM) Run() ([]byte, error) {
+func (evm *EVM) Run() ([]byte, types.HaltReason, error) {
 	code := evm.ctx.ByteCode
 	for {
 		pc := evm.state.Pc
 		if pc >= uint64(len(code)) {
 			evm.state.Gas = 0
-			return nil, ErrInvalidOpcode
+			return nil, types.HaltNone, ErrInvalidOpcode
 		}
 
 		opcode := types.OpCode(code[pc])
 		fn := evm.jumpTable[opcode]
 		if fn == nil {
 			evm.state.Gas = 0
-			return nil, ErrInvalidOpcode
+			return nil, types.HaltNone, ErrInvalidOpcode
 		}
 
 		cost, err := gas.Cost(opcode, evm)
 		if err != nil {
 			evm.state.Gas = 0
-			return nil, err
+			return nil, types.HaltNone, err
 		}
 		if evm.state.Gas < cost {
 			evm.state.Gas = 0
-			return nil, ErrOutOfGas
+			return nil, types.HaltNone, ErrOutOfGas
 		}
 		evm.state.Gas -= cost
 
-		if err := fn(evm); err != nil {
-			if errors.Is(err, types.ErrStopExecution) {
-				return evm.state.ReturnData, nil
-			}
+		res, err := fn(evm)
+		if err != nil {
 			evm.state.Gas = 0
-			return nil, err
+			return nil, res.Halt, err
 		}
-	}
-}
+		if res.Halt != types.HaltNone {
+			return evm.state.ReturnData, res.Halt, nil
+		}
 
-func opSTOP(e types.Executor) error {
-	return types.ErrStopExecution
+	}
 }

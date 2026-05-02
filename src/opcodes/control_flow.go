@@ -31,57 +31,57 @@ func ValidJumpDests(code []byte) map[uint64]struct{} {
 
 // OpJUMP implements the JUMP opcode (0x56): unconditional jump.
 // Pops the destination and sets PC to it; errors if dest is not a valid JUMPDEST.
-func OpJUMP(e types.Executor) error {
+func OpJUMP(e types.Executor) (types.OpResult, error) {
 	dest, err := e.GetStack().Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	destVal := dest.Uint64()
 	if _, ok := e.GetJumpDests()[destVal]; !ok {
-		return ErrInvalidJumpDest
+		return types.OpResult{}, ErrInvalidJumpDest
 	}
 	e.SetPC(destVal)
-	return nil
+	return types.OpResult{}, nil
 }
 
 // OpJUMPI implements the JUMPI opcode (0x57): conditional jump.
 // Stack: µ's[0] = destination (top), µ's[1] = condition.
 // Jumps to destination if condition != 0, otherwise advances PC by 1.
-func OpJUMPI(e types.Executor) error {
+func OpJUMPI(e types.Executor) (types.OpResult, error) {
 	stack := e.GetStack()
 	dest, err := stack.Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	cond, err := stack.Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	if cond.Sign() != 0 {
 		destVal := dest.Uint64()
 		if _, ok := e.GetJumpDests()[destVal]; !ok {
-			return ErrInvalidJumpDest
+			return types.OpResult{}, ErrInvalidJumpDest
 		}
 		e.SetPC(destVal)
 	} else {
 		e.SetPC(e.GetPC() + 1)
 	}
-	return nil
+	return types.OpResult{}, nil
 }
 
 // OpJUMPDEST implements the JUMPDEST opcode (0x5b): marks a valid jump destination.
 // It is a no-op at runtime; its only purpose is to be a legal jump target.
-func OpJUMPDEST(e types.Executor) error {
+func OpJUMPDEST(e types.Executor) (types.OpResult, error) {
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }
 
 // OpPC implements the PC opcode (0x58): pushes the program counter of this instruction.
-func OpPC(e types.Executor) error {
+func OpPC(e types.Executor) (types.OpResult, error) {
 	pc := e.GetPC()
 	if err := e.GetStack().Push(new(big.Int).SetUint64(pc)); err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	e.SetPC(pc + 1)
-	return nil
+	return types.OpResult{}, nil
 }

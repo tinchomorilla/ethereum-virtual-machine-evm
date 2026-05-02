@@ -5,14 +5,24 @@ import (
 	"math/big"
 )
 
-// ErrStopExecution signals a normal STOP halt (not a real error).
-var ErrStopExecution = errors.New("stop execution")
-
 // ErrWriteProtection is returned when a state-modifying opcode executes in a read-only context.
 var ErrWriteProtection = errors.New("write protection")
 
-// OpFunc is a function that implements a single EVM opcode.
-type OpFunc func(Executor) error
+type HaltReason uint8
+
+// HaltReason represents the reason why execution halted.
+const (
+	HaltNone HaltReason = iota
+	HaltStop
+	HaltReturn
+	HaltRevert
+)
+
+type OpResult struct {
+	Halt HaltReason
+}
+
+type OpFunc func(e Executor) (OpResult, error)
 
 // OpCode represents an EVM instruction.
 type OpCode byte

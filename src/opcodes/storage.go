@@ -10,12 +10,11 @@ func hashToBigInt(h types.Hash) *big.Int {
 	return new(big.Int).SetBytes(h[:])
 }
 
-
 // OpSLOAD implements SLOAD (0x54).
-func OpSLOAD(e types.Executor) error {
+func OpSLOAD(e types.Executor) (types.OpResult, error) {
 	keyInt, err := e.GetStack().Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	key := types.BigIntToHash(keyInt)
 	ctx := e.GetContext()
@@ -29,26 +28,26 @@ func OpSLOAD(e types.Executor) error {
 	}
 
 	if err := e.GetStack().Push(hashToBigInt(value)); err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }
 
 // OpSSTORE implements SSTORE (0x55).
-func OpSSTORE(e types.Executor) error {
+func OpSSTORE(e types.Executor) (types.OpResult, error) {
 	ctx := e.GetContext()
 	if ctx.ReadOnly {
-		return types.ErrWriteProtection
+		return types.OpResult{}, types.ErrWriteProtection
 	}
 
 	keyInt, err := e.GetStack().Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 	valueInt, err := e.GetStack().Pop()
 	if err != nil {
-		return err
+		return types.OpResult{}, err
 	}
 
 	key := types.BigIntToHash(keyInt)
@@ -62,5 +61,5 @@ func OpSSTORE(e types.Executor) error {
 	}
 
 	e.SetPC(e.GetPC() + 1)
-	return nil
+	return types.OpResult{}, nil
 }

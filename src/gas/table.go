@@ -161,6 +161,10 @@ func init() {
 	// Dynamic costs for storage (EIP-2929 / EIP-2200)
 	dynamicCost[0x54] = gasSLoad
 	dynamicCost[0x55] = gasSStore
+
+	// Dynamic costs for RETURN and REVERT
+	dynamicCost[0xf3] = gasReturnAndRevert // RETURN
+	dynamicCost[0xfd] = gasReturnAndRevert // REVERT
 }
 
 // gasSLoad calculates gas for SLOAD (0x54)
@@ -287,6 +291,30 @@ func gasMStoreAndMLoad(e types.Executor) (uint64, error) {
 	// i should check if the offset is valid (not too large) but for simplicity, let's assume it's always valid.
 	newSize := offset.Uint64() + size
 
+	currentSize := e.GetMemory().Len()
+
+	return calcMemExpansionCost(currentSize, newSize), nil
+}
+
+// gasReturnAndRevert calculates the dynamic gas cost for RETURN (0xf3) and REVERT (0xfd).
+// It peeks at the stack to determine memory expansion but does NOT pop elements.
+func gasReturnAndRevert(e types.Executor) (uint64, error) {
+	// RETURN/REVERT expects: offset, size
+	offset, err := e.GetStack().Peek(1)
+	if err != nil {
+		return 0, err
+	}
+	size, err := e.GetStack().Peek(2)
+	if err != nil {
+		return 0, err
+	}
+
+	// If size is 0, there is no memory expansion, regardless of the offset.
+	if size.Sign() == 0 {
+		return 0, nil
+	}
+
+	newSize := offset.Uint64() + size.Uint64()
 	currentSize := e.GetMemory().Len()
 
 	return calcMemExpansionCost(currentSize, newSize), nil

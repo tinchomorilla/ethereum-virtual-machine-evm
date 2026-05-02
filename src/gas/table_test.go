@@ -52,6 +52,7 @@ func (f *fakeExec) GetJumpDests() map[uint64]struct{}         { return nil }
 func (f *fakeExec) GetContext() types.ExecutionContext        { return f.ctx }
 func (f *fakeExec) GetGas() uint64                            { return 0 }
 func (f *fakeExec) GetReturnData() []byte                     { return nil }
+func (f *fakeExec) SetReturnData([]byte)                      {}
 func (f *fakeExec) GetAccruedSubstate() types.AccruedSubstate { return f.sub }
 
 func newExec(db types.StateDB, addr types.Address) *fakeExec {

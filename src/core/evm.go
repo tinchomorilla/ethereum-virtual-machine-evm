@@ -24,6 +24,7 @@ func (evm *EVM) GetJumpDests() map[uint64]struct{}  { return evm.jumpDests }
 func (evm *EVM) GetContext() types.ExecutionContext { return evm.ctx }
 func (evm *EVM) GetGas() uint64                     { return evm.state.Gas }
 func (evm *EVM) GetReturnData() []byte              { return evm.state.ReturnData }
+func (evm *EVM) SetReturnData(data []byte)          { evm.state.ReturnData = data }
 func (evm *EVM) GetAccruedSubstate() types.AccruedSubstate {
 	return evm.accruedSubstate
 }
@@ -116,6 +117,8 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x54] = opcodes.OpSLOAD
 	evm.jumpTable[0x55] = opcodes.OpSSTORE
 	evm.jumpTable[0x59] = opcodes.OpMSIZE
+	evm.jumpTable[0xfd] = opcodes.OpREVERT
+	evm.jumpTable[0xf3] = opcodes.OpRETURN
 
 	for i := range 32 {
 		evm.jumpTable[0x60+i] = opcodes.MakePush(i + 1)

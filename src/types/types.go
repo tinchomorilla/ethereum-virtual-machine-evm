@@ -179,5 +179,6 @@ type Executor interface {
 	GetContext() ExecutionContext
 	GetGas() uint64
 	GetReturnData() []byte
+	SetReturnData([]byte)
 	GetAccruedSubstate() AccruedSubstate
 }

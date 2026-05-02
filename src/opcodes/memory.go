@@ -31,8 +31,11 @@ func OpMSTORE(e types.Executor) (types.OpResult, error) {
 	// Pad the value to 32 bytes (1 word)
 	paddedValue := padTo32Bytes(value)
 
-	// Ensure memory is large enough for the store
-	memory.Resize(offset.Uint64() + 32)
+	newSize := offset.Uint64() + 32
+	if newSize > memory.Len() {
+		words := (newSize + 31) / 32
+		memory.Resize(words * 32)
+	}
 
 	// Write the padded value to memory at the specified offset
 	err = memory.Set(offset.Uint64(), 32, paddedValue)
@@ -55,8 +58,11 @@ func OpMLOAD(e types.Executor) (types.OpResult, error) {
 		return types.OpResult{}, err
 	}
 
-	// EVM spec: MLOAD can grow memory if needed
-	memory.Resize(offset.Uint64() + 32)
+	newSize := offset.Uint64() + 32
+	if newSize > memory.Len() {
+		words := (newSize + 31) / 32
+		memory.Resize(words * 32)
+	}
 
 	// Read 32 bytes from memory at the specified offset
 	data, err := memory.Get(offset.Uint64(), 32)
@@ -90,8 +96,11 @@ func OpMSTORE8(e types.Executor) (types.OpResult, error) {
 	// Write the least significant byte of the value to memory at the specified offset
 	byteValue := byte(value.Uint64() & 0xff)
 
-	// Ensure memory is large enough for the store
-	memory.Resize(offset.Uint64() + 1)
+	newSize := offset.Uint64() + 1
+	if newSize > memory.Len() {
+		words := (newSize + 31) / 32
+		memory.Resize(words * 32)
+	}
 
 	err = memory.Set(offset.Uint64(), 1, []byte{byteValue})
 	if err != nil {

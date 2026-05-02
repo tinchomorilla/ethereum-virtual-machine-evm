@@ -103,6 +103,13 @@ func OpCALLDATACOPY(e types.Executor) (types.OpResult, error) {
 		return types.OpResult{}, err
 	}
 	data := paddedBytes(e.GetContext().Input, dataOffset.Uint64(), size.Uint64())
+
+	newSize := destOffset.Uint64() + size.Uint64()
+	if newSize > e.GetMemory().Len() {
+		words := (newSize + 31) / 32
+		e.GetMemory().Resize(words * 32)
+	}
+
 	if err := e.GetMemory().Set(destOffset.Uint64(), size.Uint64(), data); err != nil {
 		return types.OpResult{}, err
 	}
@@ -137,6 +144,13 @@ func OpCODECOPY(e types.Executor) (types.OpResult, error) {
 		return types.OpResult{}, err
 	}
 	data := paddedBytes(e.GetCode(), codeOffset.Uint64(), size.Uint64())
+
+	newSize := destOffset.Uint64() + size.Uint64()
+	if newSize > e.GetMemory().Len() {
+		words := (newSize + 31) / 32
+		e.GetMemory().Resize(words * 32)
+	}
+
 	if err := e.GetMemory().Set(destOffset.Uint64(), size.Uint64(), data); err != nil {
 		return types.OpResult{}, err
 	}
@@ -190,6 +204,13 @@ func OpRETURNDATACOPY(e types.Executor) (types.OpResult, error) {
 		return types.OpResult{}, ErrReturnDataOutOfBounds
 	}
 	data := returnData[dataOffset.Uint64():end]
+
+	newSize := destOffset.Uint64() + size.Uint64()
+	if newSize > e.GetMemory().Len() {
+		words := (newSize + 31) / 32
+		e.GetMemory().Resize(words * 32)
+	}
+
 	if err := e.GetMemory().Set(destOffset.Uint64(), size.Uint64(), data); err != nil {
 		return types.OpResult{}, err
 	}

@@ -12,6 +12,13 @@ func OpRETURN(e types.Executor) (types.OpResult, error) {
 	if err != nil {
 		return types.OpResult{}, err
 	}
+
+	newSize := offset.Uint64() + size.Uint64()
+	if newSize > e.GetMemory().Len() {
+		words := (newSize + 31) / 32
+		e.GetMemory().Resize(words * 32)
+	}
+
 	data, err := e.GetMemory().Get(offset.Uint64(), size.Uint64())
 	if err != nil {
 		return types.OpResult{}, err
@@ -26,6 +33,13 @@ func OpREVERT(e types.Executor) (types.OpResult, error) {
 	if err != nil {
 		return types.OpResult{}, err
 	}
+
+	newSize := offset.Uint64() + size.Uint64()
+	if newSize > e.GetMemory().Len() {
+		words := (newSize + 31) / 32
+		e.GetMemory().Resize(words * 32)
+	}
+
 	data, err := e.GetMemory().Get(offset.Uint64(), size.Uint64())
 	if err != nil {
 		return types.OpResult{}, err

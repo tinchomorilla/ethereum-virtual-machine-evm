@@ -14,21 +14,6 @@ import (
 var ErrInvalidOpcode = errors.New("invalid opcode")
 var ErrOutOfGas = errors.New("out of gas")
 
-// Executor interface implementation
-func (evm *EVM) GetStack() types.Stack              { return evm.state.Stack }
-func (evm *EVM) GetMemory() types.Memory            { return evm.state.Memory }
-func (evm *EVM) GetCode() []byte                    { return evm.ctx.ByteCode }
-func (evm *EVM) GetPC() uint64                      { return evm.state.Pc }
-func (evm *EVM) SetPC(pc uint64)                    { evm.state.Pc = pc }
-func (evm *EVM) GetJumpDests() map[uint64]struct{}  { return evm.jumpDests }
-func (evm *EVM) GetContext() types.ExecutionContext { return evm.ctx }
-func (evm *EVM) GetGas() uint64                     { return evm.state.Gas }
-func (evm *EVM) GetReturnData() []byte              { return evm.state.ReturnData }
-func (evm *EVM) SetReturnData(data []byte)          { evm.state.ReturnData = data }
-func (evm *EVM) GetAccruedSubstate() types.AccruedSubstate {
-	return evm.accruedSubstate
-}
-
 // EVM is the Ethereum Virtual Machine.
 type EVM struct {
 	ctx             types.ExecutionContext
@@ -117,6 +102,7 @@ func buildJumpTable(evm *EVM) {
 	evm.jumpTable[0x54] = opcodes.OpSLOAD
 	evm.jumpTable[0x55] = opcodes.OpSSTORE
 	evm.jumpTable[0x59] = opcodes.OpMSIZE
+	evm.jumpTable[0xf1] = opcodes.OpCALL
 	evm.jumpTable[0xfd] = opcodes.OpREVERT
 	evm.jumpTable[0xf3] = opcodes.OpRETURN
 
@@ -129,11 +115,6 @@ func buildJumpTable(evm *EVM) {
 	for i := range 16 {
 		evm.jumpTable[0x90+i] = opcodes.MakeSwap(i + 1)
 	}
-}
-
-// State returns the current machine state
-func (evm *EVM) State() *types.MachineState {
-	return &evm.state
 }
 
 // Run executes the bytecode until STOP, an error occurs or it runs out of gas.
@@ -176,3 +157,23 @@ func (evm *EVM) Run() ([]byte, types.HaltReason, error) {
 
 	}
 }
+
+// RunSubContext instantiates a new child EVM and executes it.
+func (evm *EVM) RunSubContext(childCtx types.ExecutionContext, childGas uint64) ([]byte, types.HaltReason, error) {
+	childEVM := New(childCtx, childGas)
+	return childEVM.Run()
+}
+
+// Executor interface implementation
+func (evm *EVM) GetStack() types.Stack                     { return evm.state.Stack }
+func (evm *EVM) GetMemory() types.Memory                   { return evm.state.Memory }
+func (evm *EVM) GetCode() []byte                           { return evm.ctx.ByteCode }
+func (evm *EVM) GetPC() uint64                             { return evm.state.Pc }
+func (evm *EVM) SetPC(pc uint64)                           { evm.state.Pc = pc }
+func (evm *EVM) GetJumpDests() map[uint64]struct{}         { return evm.jumpDests }
+func (evm *EVM) GetContext() types.ExecutionContext        { return evm.ctx }
+func (evm *EVM) GetGas() uint64                            { return evm.state.Gas }
+func (evm *EVM) GetReturnData() []byte                     { return evm.state.ReturnData }
+func (evm *EVM) SetReturnData(data []byte)                 { evm.state.ReturnData = data }
+func (evm *EVM) GetAccruedSubstate() types.AccruedSubstate { return evm.accruedSubstate }
+func (evm *EVM) State() *types.MachineState                { return &evm.state }

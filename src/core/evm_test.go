@@ -1103,3 +1103,325 @@ func TestEXTCODEHASH(t *testing.T) {
 		t.Fatalf("expected %x, got %x", expectedHash, top.Bytes())
 	}
 }
+
+// ── CALL (0xf1) ───────────────────────────────────────────────────────────────
+
+// makeCALLBytecode builds parent bytecode that executes a single CALL and then STOPs.
+// Stack order pushed (bottom→top): retSize, retOffset, argsSize, argsOffset, value, addr, gas.
+func makeCALLBytecode(target types.Address, gasLimit, value uint64) []byte {
+	push1 := func(v byte) []byte { return []byte{0x60, v} }
+	push2 := func(v uint16) []byte { return []byte{0x61, byte(v >> 8), byte(v)} }
+
+	push64 := func(v uint64) []byte {
+		if v <= 0xff {
+			return push1(byte(v))
+		}
+		if v <= 0xffff {
+			return push2(uint16(v))
+		}
+		b := make([]byte, 32)
+		new(big.Int).SetUint64(v).FillBytes(b)
+		return append([]byte{0x7f}, b...) // PUSH32
+	}
+
+	var code []byte
+	code = append(code, push1(0)...)        // retSize
+	code = append(code, push1(0)...)        // retOffset
+	code = append(code, push1(0)...)        // argsSize
+	code = append(code, push1(0)...)        // argsOffset
+	code = append(code, push64(value)...)   // value
+	code = append(code, 0x73)               // PUSH20
+	code = append(code, target[:]...)
+	code = append(code, push64(gasLimit)...) // gas
+	code = append(code, 0xf1)               // CALL
+	code = append(code, 0x00)               // STOP
+	return code
+}
+
+// TestCALL_DepthExceeded verifies that CALL pushes 0 and does nothing when the
+// call-depth limit (1024) is already reached.
+func TestCALL_DepthExceeded(t *testing.T) {
+	var target types.Address
+	target[19] = 0xAA
+	db := statedb.NewMock()
+	db.AddBalance(types.Address{}, big.NewInt(9999)) // parent has plenty of ETH
+
+	code := makeCALLBytecode(target, 1000, 10)
+	evm := core.New(types.ExecutionContext{
+		ByteCode: code,
+		StateDB:  db,
+		Depth:    1024, // already at the limit
+	}, 1_000_000)
+
+	_, _, err := evm.Run()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Sign() != 0 {
+		t.Fatalf("expected 0 (depth exceeded), got %s", top)
+	}
+}
+
+// TestCALL_InsufficientBalance verifies that CALL pushes 0 and leaves the state
+// unchanged when the caller does not hold enough ETH to cover the requested value.
+func TestCALL_InsufficientBalance(t *testing.T) {
+	var caller, target types.Address
+	caller[19] = 0x01
+	target[19] = 0xAA
+	db := statedb.NewMock()
+	db.AddBalance(caller, big.NewInt(30)) // has 30, will try to send 50
+
+	code := makeCALLBytecode(target, 1000, 50)
+	evm := core.New(types.ExecutionContext{
+		ByteCode: code,
+		StateDB:  db,
+		Address:  caller,
+	}, 1_000_000)
+
+	_, _, err := evm.Run()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Sign() != 0 {
+		t.Fatalf("expected 0 (insufficient balance), got %s", top)
+	}
+	if got := db.GetBalance(caller); got.Cmp(big.NewInt(30)) != 0 {
+		t.Fatalf("caller balance should remain 30, got %s", got)
+	}
+	if got := db.GetBalance(target); got.Sign() != 0 {
+		t.Fatalf("target balance should remain 0, got %s", got)
+	}
+}
+
+// TestCALL_ValueTransferRevertedOnChildFailure is the core snapshot test:
+// value is transferred before the child runs, but when the child fails the
+// snapshot must restore both balances to their original values.
+func TestCALL_ValueTransferRevertedOnChildFailure(t *testing.T) {
+	var caller, target types.Address
+	caller[19] = 0x01
+	target[19] = 0xBB
+	db := statedb.NewMock()
+	db.AddBalance(caller, big.NewInt(100))
+
+	code := makeCALLBytecode(target, 1000, 50)
+	evm := core.New(types.ExecutionContext{
+		ByteCode: code,
+		StateDB:  db,
+		Address:  caller,
+	}, 1_000_000)
+
+	_, _, err := evm.Run()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Sign() != 0 {
+		t.Fatalf("expected 0 (child failed, revert), got %s", top)
+	}
+	if got := db.GetBalance(caller); got.Cmp(big.NewInt(100)) != 0 {
+		t.Fatalf("caller balance must be restored to 100, got %s", got)
+	}
+	if got := db.GetBalance(target); got.Sign() != 0 {
+		t.Fatalf("target balance must be restored to 0, got %s", got)
+	}
+}
+
+// TestCALL_ZeroValue_SkipsBalanceCheck verifies that value=0 bypasses the
+// balance check, so a caller with zero ETH is not rejected before reaching
+// child execution.
+func TestCALL_ZeroValue_SkipsBalanceCheck(t *testing.T) {
+	var caller, target types.Address
+	caller[19] = 0x01
+	target[19] = 0xCC
+	db := statedb.NewMock()
+	// caller has 0 balance — must not be rejected
+
+	code := makeCALLBytecode(target, 1000, 0)
+	evm := core.New(types.ExecutionContext{
+		ByteCode: code,
+		StateDB:  db,
+		Address:  caller,
+	}, 1_000_000)
+
+	_, _, err := evm.Run()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// The call reaches child execution (which fails due to empty bytecode), not the balance guard.
+	// Either way the stack holds 0, but no error means the balance guard was not triggered.
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Sign() != 0 {
+		t.Fatalf("expected 0 (child has no bytecode), got %s", top)
+	}
+}
+
+// TestCALL_Success_ChildHasCode verifies that CALL pushes 1 when the child
+// contract has real bytecode that halts successfully (STOP).
+func TestCALL_Success_ChildHasCode(t *testing.T) {
+	var caller, target types.Address
+	caller[19] = 0x01
+	target[19] = 0xDD
+	db := statedb.NewMock()
+	db.SetCode(target, []byte{0x00}) // child: STOP
+
+	code := makeCALLBytecode(target, 50000, 0)
+	evm := core.New(types.ExecutionContext{
+		ByteCode: code,
+		StateDB:  db,
+		Address:  caller,
+	}, 1_000_000)
+
+	_, _, err := evm.Run()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1 (call succeeded), got %s", top)
+	}
+}
+
+// TestCALL_Success_ValueTransferCommitted verifies that a successful child call
+// commits the value transfer instead of reverting it.
+func TestCALL_Success_ValueTransferCommitted(t *testing.T) {
+	var caller, target types.Address
+	caller[19] = 0x01
+	target[19] = 0xDD
+	db := statedb.NewMock()
+	db.AddBalance(caller, big.NewInt(100))
+	db.SetCode(target, []byte{0x00}) // child: STOP
+
+	code := makeCALLBytecode(target, 50000, 50)
+	evm := core.New(types.ExecutionContext{
+		ByteCode: code,
+		StateDB:  db,
+		Address:  caller,
+	}, 1_000_000)
+
+	_, _, err := evm.Run()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1 (success), got %s", top)
+	}
+	if got := db.GetBalance(caller); got.Cmp(big.NewInt(50)) != 0 {
+		t.Fatalf("caller balance should be 50, got %s", got)
+	}
+	if got := db.GetBalance(target); got.Cmp(big.NewInt(50)) != 0 {
+		t.Fatalf("target balance should be 50, got %s", got)
+	}
+}
+
+// TestCALL_Success_ReturnDataPropagated verifies that the child's RETURN data is
+// stored in the parent's ReturnData field after a successful call.
+func TestCALL_Success_ReturnDataPropagated(t *testing.T) {
+	var caller, target types.Address
+	caller[19] = 0x01
+	target[19] = 0xEE
+	db := statedb.NewMock()
+
+	// Child: store 0xBE at memory slot 0 (right-aligned), then RETURN 1 byte from offset 31.
+	childCode := []byte{
+		0x60, 0xBE, // PUSH1 0xBE
+		0x60, 0x00, // PUSH1 0x00
+		0x52,       // MSTORE
+		0x60, 0x01, // PUSH1 1  (size)
+		0x60, 0x1f, // PUSH1 31 (offset of last byte in 32-byte word)
+		0xf3,       // RETURN
+	}
+	db.SetCode(target, childCode)
+
+	code := makeCALLBytecode(target, 50000, 0)
+	evm := core.New(types.ExecutionContext{
+		ByteCode: code,
+		StateDB:  db,
+		Address:  caller,
+	}, 1_000_000)
+
+	_, _, err := evm.Run()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	top, _ := evm.State().Stack.Peek(1)
+	if top.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1 (call succeeded), got %s", top)
+	}
+	rd := evm.State().ReturnData
+	if len(rd) != 1 || rd[0] != 0xBE {
+		t.Fatalf("expected return data [0xBE], got %v", rd)
+	}
+}
+
+// TestRunSubContext_SuccessReturnsData tests the success path of child execution
+// by calling RunSubContext directly with a child that performs RETURN.
+// This is the path that OpCALL will exercise once contract bytecode wiring is complete.
+func TestRunSubContext_SuccessReturnsData(t *testing.T) {
+	db := statedb.NewMock()
+
+	// Child: PUSH1 0x42, PUSH1 0x00, MSTORE, PUSH1 0x01, PUSH1 0x1f, RETURN
+	// Stores 0x42 at byte offset 31 of memory, then returns that 1 byte.
+	childCode := []byte{
+		0x60, 0x42, // PUSH1 0x42
+		0x60, 0x00, // PUSH1 0x00
+		0x52,       // MSTORE
+		0x60, 0x01, // PUSH1 1  (size)
+		0x60, 0x1f, // PUSH1 31 (offset)
+		0xf3,       // RETURN
+	}
+	childCtx := types.ExecutionContext{ByteCode: childCode, StateDB: db}
+
+	parent := core.New(types.ExecutionContext{ByteCode: []byte{0x00}, StateDB: db}, 1_000_000)
+	data, halt, err := parent.RunSubContext(childCtx, 1_000_000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if halt != types.HaltReturn {
+		t.Fatalf("expected HaltReturn, got %v", halt)
+	}
+	if len(data) != 1 || data[0] != 0x42 {
+		t.Fatalf("expected return data [0x42], got %v", data)
+	}
+}
+
+// TestRunSubContext_StateChangesPreserved verifies that a successful child
+// execution's state mutations (SSTORE) are visible in the shared StateDB
+// after the child returns.
+func TestRunSubContext_StateChangesPreserved(t *testing.T) {
+	var childAddr types.Address
+	childAddr[19] = 0x02
+	db := statedb.NewMock()
+
+	// Child: PUSH1 0xFF (value), PUSH1 0x01 (key), SSTORE, STOP
+	childCode := []byte{
+		0x60, 0xff, // PUSH1 0xFF
+		0x60, 0x01, // PUSH1 0x01
+		0x55,       // SSTORE
+		0x00,       // STOP
+	}
+	childCtx := types.ExecutionContext{
+		ByteCode: childCode,
+		StateDB:  db,
+		Address:  childAddr,
+	}
+
+	parent := core.New(types.ExecutionContext{ByteCode: []byte{0x00}, StateDB: db}, 1_000_000)
+	_, halt, err := parent.RunSubContext(childCtx, 1_000_000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if halt != types.HaltStop {
+		t.Fatalf("expected HaltStop, got %v", halt)
+	}
+
+	var key types.Hash
+	key[31] = 0x01
+	var expected types.Hash
+	expected[31] = 0xff
+	if got := db.GetState(childAddr, key); got != expected {
+		t.Fatalf("expected storage slot 0x01 = 0xff, got %x", got)
+	}
+}

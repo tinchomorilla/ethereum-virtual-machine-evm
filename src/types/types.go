@@ -40,6 +40,17 @@ func BigIntToHash(b *big.Int) Hash {
 	return h
 }
 
+func BigIntToAddress(b *big.Int) Address {
+	var addr Address
+	bytes := b.Bytes()
+	if len(bytes) > 20 {
+		copy(addr[:], bytes[len(bytes)-20:])
+	} else {
+		copy(addr[20-len(bytes):], bytes)
+	}
+	return addr
+}
+
 // MachineState holds the volatile, execution-specific state of the EVM.
 // It is completely wiped after the execution halts.
 type MachineState struct {
@@ -142,9 +153,13 @@ type StateDB interface {
 	SubBalance(addr Address, amount *big.Int)
 	GetCodeSize(addr Address) uint64
 	GetCodeHash(addr Address) Hash
+	GetCode(addr Address) []byte
+	SetCode(addr Address, code []byte)
 	GetState(addr Address, key Hash) Hash
 	SetState(addr Address, key Hash, value Hash)
 	GetCommittedState(addr Address, key Hash) Hash
+	Snapshot() int
+	RevertToSnapshot(id int)
 }
 
 // Stack defines the interface for the EVM execution stack.
@@ -181,4 +196,5 @@ type Executor interface {
 	GetReturnData() []byte
 	SetReturnData([]byte)
 	GetAccruedSubstate() AccruedSubstate
+	RunSubContext(ctx ExecutionContext, gas uint64) ([]byte, HaltReason, error)
 }

@@ -1,6 +1,7 @@
 package statedb
 
 import (
+	"maps"
 	"math/big"
 
 	"github.com/tinchomorilla/ethereum-virtual-machine-evm/src/types"
@@ -13,11 +14,13 @@ type Account struct {
 	CodeSize       uint64
 	CodeHash       types.Hash
 	CommittedState map[types.Hash]types.Hash
+	Code           []byte
 }
 
 // MockStateDB implements types.StateDB for testing and early phases.
 type MockStateDB struct {
-	accounts map[types.Address]*Account
+	accounts  map[types.Address]*Account
+	snapshots []map[types.Address]*Account 
 }
 
 // NewMock creates a fresh in-memory state database.
@@ -125,4 +128,48 @@ func (m *MockStateDB) GetCodeHash(addr types.Address) types.Hash {
 func (m *MockStateDB) AddCodeHash(addr types.Address, hash types.Hash) {
 	acc := m.getOrCreateAccount(addr)
 	acc.CodeHash = hash
+}
+
+// GetCode returns the bytecode stored at the given address.
+func (m *MockStateDB) GetCode(addr types.Address) []byte {
+	acc, exists := m.accounts[addr]
+	if !exists {
+		return nil
+	}
+	return acc.Code
+}
+
+// SetCode stores bytecode at the given address.
+func (m *MockStateDB) SetCode(addr types.Address, code []byte) {
+	acc := m.getOrCreateAccount(addr)
+	acc.Code = code
+}
+
+// Snapshot creates a deep copy of the current accounts map, appends it to the
+// snapshots slice, and returns the index (id) for later revert.
+func (m *MockStateDB) Snapshot() int {
+	clone := make(map[types.Address]*Account, len(m.accounts))
+	for addr, acc := range m.accounts {
+		clonedAcc := &Account{
+			Balance:        new(big.Int).Set(acc.Balance),
+			CodeSize:       acc.CodeSize,
+			CodeHash:       acc.CodeHash,
+			Code:           append([]byte{}, acc.Code...),
+			State:          make(map[types.Hash]types.Hash, len(acc.State)),
+			CommittedState: make(map[types.Hash]types.Hash, len(acc.CommittedState)),
+		}
+		maps.Copy(clonedAcc.State, acc.State)
+		maps.Copy(clonedAcc.CommittedState, acc.CommittedState)
+		clone[addr] = clonedAcc
+	}
+	m.snapshots = append(m.snapshots, clone)
+	return len(m.snapshots) - 1
+}
+
+// RevertToSnapshot restores the accounts map to the state captured at the given id.
+func (m *MockStateDB) RevertToSnapshot(id int) {
+	if id < 0 || id >= len(m.snapshots) {
+		return
+	}
+	m.accounts = m.snapshots[id]
 }

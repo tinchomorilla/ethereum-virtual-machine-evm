@@ -155,6 +155,8 @@ type StateDB interface {
 	GetCodeHash(addr Address) Hash
 	GetCode(addr Address) []byte
 	SetCode(addr Address, code []byte)
+	GetNonce(addr Address) uint64
+	SetNonce(addr Address, nonce uint64)
 	GetState(addr Address, key Hash) Hash
 	SetState(addr Address, key Hash, value Hash)
 	GetCommittedState(addr Address, key Hash) Hash

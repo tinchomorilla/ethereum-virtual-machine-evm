@@ -6,21 +6,22 @@ import (
 
 // Gas constants for EIP-2929 and EIP-2200
 const (
-	GZero     uint64 = 0
-	GJumpDest uint64 = 1
-	GBase     uint64 = 2
-	GVeryLow  uint64 = 3
-	GLow      uint64 = 5
-	GMid      uint64 = 8
-	GHigh     uint64 = 10
-	GExp      uint64 = 10
-	GExpByte  uint64 = 10
-	GSha3     uint64 = 30
-	GSha3Word uint64 = 6
-	GBalance  uint64 = 20
-	GLog      uint64 = 375
-	GLogTopic uint64 = 375
-	GLogData  uint64 = 8
+	GZero         uint64 = 0
+	GJumpDest     uint64 = 1
+	GBase         uint64 = 2
+	GVeryLow      uint64 = 3
+	GLow          uint64 = 5
+	GMid          uint64 = 8
+	GHigh         uint64 = 10
+	GExp          uint64 = 10
+	GExpByte      uint64 = 10
+	GSha3         uint64 = 30
+	GSha3Word     uint64 = 6
+	GBalance      uint64 = 20
+	GLog          uint64 = 375
+	GLogTopic     uint64 = 375
+	GLogData      uint64 = 8
+	GInitCodeWord uint64 = 2
 
 	// EIP-2929 constants
 	GColdSload       uint64 = 2100
@@ -165,6 +166,53 @@ func init() {
 	// Dynamic costs for RETURN and REVERT
 	dynamicCost[0xf3] = gasReturnAndRevert // RETURN
 	dynamicCost[0xfd] = gasReturnAndRevert // REVERT
+
+	// Dynamic costs for CREATE and CREATE2
+	dynamicCost[0xf0] = gasCreate  // CREATE
+	dynamicCost[0xf5] = gasCreate2 // CREATE2
+}
+
+func gasCreate(e types.Executor) (uint64, error) {
+	// Stack: value (1), offset (2), size (3)
+	offset, err := e.GetStack().Peek(2)
+	if err != nil {
+		return 0, err
+	}
+	size, err := e.GetStack().Peek(3)
+	if err != nil {
+		return 0, err
+	}
+	sizeUint := size.Uint64()
+	if sizeUint == 0 {
+		return 0, nil
+	}
+	newSize := offset.Uint64() + sizeUint
+	memCost := calcMemExpansionCost(e.GetMemory().Len(), newSize)
+	words := (sizeUint + 31) / 32
+	initCodeCost := words * GInitCodeWord
+	return memCost + initCodeCost, nil
+}
+
+func gasCreate2(e types.Executor) (uint64, error) {
+	// Stack: value (1), offset (2), size (3), salt (4)
+	offset, err := e.GetStack().Peek(2)
+	if err != nil {
+		return 0, err
+	}
+	size, err := e.GetStack().Peek(3)
+	if err != nil {
+		return 0, err
+	}
+	sizeUint := size.Uint64()
+	if sizeUint == 0 {
+		return 0, nil
+	}
+	newSize := offset.Uint64() + sizeUint
+	memCost := calcMemExpansionCost(e.GetMemory().Len(), newSize)
+	words := (sizeUint + 31) / 32
+	initCodeCost := words * GInitCodeWord
+	hashCost := words * GSha3Word
+	return memCost + initCodeCost + hashCost, nil
 }
 
 // gasSLoad calculates gas for SLOAD (0x54)

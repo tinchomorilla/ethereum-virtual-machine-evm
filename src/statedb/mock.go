@@ -15,12 +15,13 @@ type Account struct {
 	CodeHash       types.Hash
 	CommittedState map[types.Hash]types.Hash
 	Code           []byte
+	Nonce          uint64
 }
 
 // MockStateDB implements types.StateDB for testing and early phases.
 type MockStateDB struct {
 	accounts  map[types.Address]*Account
-	snapshots []map[types.Address]*Account 
+	snapshots []map[types.Address]*Account
 }
 
 // NewMock creates a fresh in-memory state database.
@@ -145,6 +146,19 @@ func (m *MockStateDB) SetCode(addr types.Address, code []byte) {
 	acc.Code = code
 }
 
+func (m *MockStateDB) GetNonce(addr types.Address) uint64 {
+	acc, exists := m.accounts[addr]
+	if !exists {
+		return 0
+	}
+	return acc.Nonce
+}
+
+func (m *MockStateDB) SetNonce(addr types.Address, nonce uint64) {
+	acc := m.getOrCreateAccount(addr)
+	acc.Nonce = nonce
+}
+
 // Snapshot creates a deep copy of the current accounts map, appends it to the
 // snapshots slice, and returns the index (id) for later revert.
 func (m *MockStateDB) Snapshot() int {
@@ -157,6 +171,7 @@ func (m *MockStateDB) Snapshot() int {
 			Code:           append([]byte{}, acc.Code...),
 			State:          make(map[types.Hash]types.Hash, len(acc.State)),
 			CommittedState: make(map[types.Hash]types.Hash, len(acc.CommittedState)),
+			Nonce:          acc.Nonce,
 		}
 		maps.Copy(clonedAcc.State, acc.State)
 		maps.Copy(clonedAcc.CommittedState, acc.CommittedState)
